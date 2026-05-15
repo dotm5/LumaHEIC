@@ -40,6 +40,11 @@ describe('presets', () => {
     expect(defaultBypassOptions).toEqual(hdrPresets.natural)
     expect(defaultBypassOptions.headroom).toBeLessThanOrEqual(3)
     expect(defaultBypassOptions.strength).toBeLessThanOrEqual(0.65)
+    expect(defaultBypassOptions.exposure).toBe(0)
+    expect(defaultBypassOptions.highlights).toBe(0)
+    expect(defaultBypassOptions.whites).toBe(0)
+    expect(defaultBypassOptions.shadows).toBe(0)
+    expect(defaultBypassOptions.blacks).toBe(0)
     expect(defaultBypassOptions.gainMapResolutionMode).toBe('auto')
   })
 
@@ -64,6 +69,24 @@ describe('gain map generation', () => {
     const bright = generateBypassGainMap(solid(8, 8, 252), defaultBypassOptions)
     expect(bright.stats.meanGain).toBeGreaterThan(dark.stats.meanGain)
     expect(bright.stats.activePixels).toBe(64)
+  })
+
+  it('allows tone sliders below neutral to reduce generated gain', () => {
+    const image = solid(8, 8, 252)
+    const reduced = generateBypassGainMap(image, {
+      ...defaultBypassOptions,
+      highlights: -1,
+      whites: -1,
+    })
+    const neutral = generateBypassGainMap(image, defaultBypassOptions)
+    const boosted = generateBypassGainMap(image, {
+      ...defaultBypassOptions,
+      highlights: 1,
+      whites: 1,
+    })
+
+    expect(reduced.stats.meanGain).toBeLessThan(neutral.stats.meanGain)
+    expect(boosted.stats.meanGain).toBeGreaterThan(neutral.stats.meanGain)
   })
 })
 

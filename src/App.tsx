@@ -59,6 +59,8 @@ const extremeGainMapOptions: BypassOptions = {
   strength: 1,
   gainMapResolutionMode: 'full',
 }
+const toneSliderMin = -1
+const toneSliderMax = 1
 
 function App() {
   const [language, setLanguage] = React.useState<Language>(() => getInitialLanguage())
@@ -374,46 +376,46 @@ function App() {
             <Slider
               label={t.exposure}
               value={options.exposure}
-              min={-1}
-              max={1}
+              min={toneSliderMin}
+              max={toneSliderMax}
               step={0.01}
-              format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} EV`}
+              format={(v) => `${formatTonePercent(v)} (${v > 0 ? '+' : ''}${v.toFixed(2)} EV)`}
               onChange={(exposure) => updateOptions({ exposure })}
             />
             <Slider
               label={t.highlights}
               value={options.highlights}
-              min={0}
-              max={1}
+              min={toneSliderMin}
+              max={toneSliderMax}
               step={0.01}
-              format={formatPercent}
+              format={formatTonePercent}
               onChange={(highlights) => updateOptions({ highlights })}
             />
             <Slider
               label={t.whites}
               value={options.whites}
-              min={0}
-              max={1}
+              min={toneSliderMin}
+              max={toneSliderMax}
               step={0.01}
-              format={formatPercent}
+              format={formatTonePercent}
               onChange={(whites) => updateOptions({ whites })}
             />
             <Slider
               label={t.shadows}
               value={options.shadows}
-              min={0}
-              max={1}
+              min={toneSliderMin}
+              max={toneSliderMax}
               step={0.01}
-              format={formatPercent}
+              format={formatTonePercent}
               onChange={(shadows) => updateOptions({ shadows })}
             />
             <Slider
               label={t.blacks}
               value={options.blacks}
-              min={0}
-              max={1}
+              min={toneSliderMin}
+              max={toneSliderMax}
               step={0.01}
-              format={formatPercent}
+              format={formatTonePercent}
               onChange={(blacks) => updateOptions({ blacks })}
             />
             <Slider
@@ -701,6 +703,10 @@ function Preview({ title, url }: { title: string; url?: string }) {
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`
+}
+
+function formatTonePercent(value: number) {
+  return `${Math.round(((value + 1) / 2) * 100)}%`
 }
 
 function presetTranslationKey(id: PresetId) {

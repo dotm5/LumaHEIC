@@ -34,6 +34,8 @@ export type GainMapResult = {
 const REC709_R = 0.2126
 const REC709_G = 0.7152
 const REC709_B = 0.0722
+const BASE_HIGHLIGHT_WEIGHT = 0.45
+const BASE_WHITE_WEIGHT = 0.35
 
 export function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value))
@@ -94,10 +96,19 @@ export function generateBypassGainMap(image: RgbaImage, options: BypassOptions):
   const glow = clamp(options.glow, 0, 1)
   const highlightStart = clamp(options.highlightStart - glow * 0.04, 0.02, 0.98)
   const highlightEnd = Math.max(highlightStart + 0.01, clamp(options.highlightEnd, 0.03, 1))
-  const highlights = clamp(options.highlights, 0, 1)
-  const whites = clamp(options.whites, 0, 1)
-  const shadows = clamp(options.shadows, 0, 1)
-  const blacks = clamp(options.blacks, 0, 1)
+  const highlights = clamp(options.highlights, -1, 1)
+  const whites = clamp(options.whites, -1, 1)
+  const shadows = clamp(options.shadows, -1, 1)
+  const blacks = clamp(options.blacks, -1, 1)
+  const highlightWeight = clamp(
+    BASE_HIGHLIGHT_WEIGHT +
+      highlights * (highlights >= 0 ? 1 - BASE_HIGHLIGHT_WEIGHT : BASE_HIGHLIGHT_WEIGHT),
+  )
+  const whiteWeight = clamp(
+    BASE_WHITE_WEIGHT + whites * (whites >= 0 ? 1 - BASE_WHITE_WEIGHT : BASE_WHITE_WEIGHT),
+  )
+  const shadowLiftWeight = Math.max(0, shadows) * 0.28
+  const blackLiftWeight = Math.max(0, blacks) * 0.18
   const shadowProtect = clamp(options.shadowProtect, 0, 1)
   const saturationProtect = clamp(options.saturationProtect, 0, 1)
   const skinProtect = clamp(options.skinProtect, 0, 1)
@@ -114,17 +125,25 @@ export function generateBypassGainMap(image: RgbaImage, options: BypassOptions):
     const highlight = smoothstep(highlightStart, highlightEnd, exposedLuma)
     const whitePoint = smoothstep(0.86, 0.995, exposedLuma)
     const shadowLift = smoothstep(0.08, 0.36, exposedLuma) * (1 - smoothstep(0.36, 0.72, exposedLuma))
+    const blackRegion = 1 - smoothstep(0.015, 0.16, exposedLuma)
     const saturation = saturationProxy(r, g, b, luma)
     const chromaGuard = 1 - saturationProtect * clamp(saturation * 0.85)
     const shadowGuard = mix(1 - shadowProtect, 1, smoothstep(0.04, 0.45, exposedLuma))
-    const blackGuard = mix(1 - blacks * 0.85, 1, smoothstep(0.015, 0.16, exposedLuma))
+    const shadowToneGuard =
+      shadows < 0 ? mix(1 + shadows * 0.8, 1, smoothstep(0.08, 0.42, exposedLuma)) : 1
+    const blackToneGuard =
+      blacks < 0 ? mix(1 + blacks * 0.9, 1, smoothstep(0.015, 0.16, exposedLuma)) : 1
     const skinGuard = 1 - skinProtect * estimateSkinToneGuard(r, g, b, luma) * 0.45
     const gain = clamp(
       strength *
-        (highlight * highlights + whitePoint * whites * 0.8 + shadowLift * shadows * 0.28) *
+        (highlight * highlightWeight +
+          whitePoint * whiteWeight * 0.8 +
+          shadowLift * shadowLiftWeight +
+          blackRegion * blackLiftWeight) *
         chromaGuard *
         shadowGuard *
-        blackGuard *
+        shadowToneGuard *
+        blackToneGuard *
         skinGuard,
     )
 

@@ -9,23 +9,23 @@
 
 **Language:** English | [简体中文](README_CN.md)
 
-LumaHEIC is an open-source, browser-only Apple HDR gain-map HEIC authoring and debugging tool. It converts ordinary SDR images, or custom SDR base + gain-map pairs, into Apple Photos-friendly HDR HEIC files.
+LumaHEIC is an open-source, browser-only HDR gain-map HEIC authoring and debugging tool. It converts ordinary SDR images, or custom SDR base + gain-map pairs, into HDR HEIC files designed for compatible photo viewers and HDR/EDR displays.
 
-Instead of hiding the result behind a single "HDR strength" slider, LumaHEIC exposes the controls that matter for HDR gain-map authoring: headroom, HDR strength, highlight response, protection strength, gain-map resolution, gain-map preview, HDR reference preview, and exported HEIC metadata checks.
+Instead of hiding the result behind a single strength slider, LumaHEIC exposes practical controls for HDR image authoring: headroom, strength, protection, gain-map resolution, gain-map preview, reference preview, and HEIC metadata validation.
 
-Everything runs locally in the browser. Images are never uploaded to any server: decoding, gain-map generation, preview rendering, and HEIC encoding run inside a Web Worker and a `libheif + x265` WASM encoder.
+Everything runs locally in the browser. Images are never uploaded to any server: decoding, gain-map generation, preview rendering, and HEIC encoding run inside a Web Worker and a WASM encoder.
 
 Try it online: [https://dotm5.github.io/LumaHEIC/](https://dotm5.github.io/LumaHEIC/)
 
-Goal: make Apple HDR / EDR image authoring transparent, controllable, debuggable, and reproducible.
+> Goal: make HDR gain-map image authoring transparent, controllable, debuggable, and reproducible.
 
 The generated HDR look is synthetic. LumaHEIC does not recover true scene HDR information that was not present in the source image.
 
 ## Why LumaHEIC?
 
-Apple devices can display HDR / EDR photos with a gain-map-based workflow, but producing an Apple Photos-recognized HDR HEIC is still difficult to inspect. Many image tools are designed around a compact one-click experience, where the user sees a final look but not the gain-map resolution, headroom, auxiliary image, XMP metadata, or HEIF item references behind it.
+HDR/EDR displays and compatible photo viewers can render gain-map-based images, but producing an inspectable HDR HEIC is still difficult. Many image tools are designed around a compact one-click experience, where the user sees a final look but not the gain-map resolution, headroom, auxiliary image, XMP metadata, or HEIF item references behind it.
 
-LumaHEIC focuses on an open Apple HDR gain-map workflow. It is useful when you want to understand what is being generated, tune the inputs, export a HEIC, and then verify how the file is wired.
+LumaHEIC focuses on an open HDR gain-map workflow. It is useful when you want to understand what is being generated, tune the inputs, export a HEIC, and then verify how the file is wired.
 
 - Open source
 - No watermark
@@ -39,9 +39,9 @@ LumaHEIC focuses on an open Apple HDR gain-map workflow. It is useful when you w
 
 ## Core Features
 
-### 1. Generate Apple HDR HEIC from SDR images
+### 1. Generate HDR gain-map HEIC from SDR images
 
-Start with one JPEG or PNG. LumaHEIC builds a synthetic Apple-style HDR gain map in the browser, previews the SDR base / gain map / HDR reference, and exports a HEIC that Apple Photos can recognize as an HDR gain-map image.
+Start with one JPEG or PNG. LumaHEIC builds a synthetic HDR gain map in the browser, previews the SDR base / gain map / HDR reference, and exports an HDR HEIC designed for compatible photo viewers and HDR/EDR displays.
 
 ### 2. Author HEIC from Base + Gain Map
 
@@ -57,13 +57,13 @@ The app is designed for static hosting. GitHub Pages serves only HTML, CSS, Java
 
 ### 5. Verify exported HEIC files
 
-LumaHEIC writes an Apple HDR gain-map auxiliary image, XMP metadata, and MakerApple HDR metadata paths used by the native encoder. The repository includes a local verification script for checking the auxiliary image, metadata, and HEIF item references after export.
+LumaHEIC writes a gain-map auxiliary image, XMP metadata, and HDR metadata paths used by the encoder. The repository includes a local verification script for checking the auxiliary image, metadata, and HEIF item references after export.
 
 ## Who is this for?
 
-- Users who want to convert ordinary images into Apple Photos HDR HEIC files.
+- Users who want to convert ordinary images into HDR HEIC files for compatible viewers and displays.
 - Creators and photography/color users who want more control than a one-click HDR filter.
-- Apple HDR / EDR researchers studying gain maps and HEIF auxiliary images.
+- HDR/EDR researchers studying gain maps and HEIF auxiliary images.
 - Image-processing developers debugging base + gain-map workflows.
 - Format-debugging users who want to inspect XMP metadata, auxiliary images, and HEIC item references.
 - Users who want local processing without uploading private images.
@@ -99,7 +99,7 @@ This mode currently covers Base + Gain Map authoring only. Base + HDR Target aut
 
 The default preset is **Natural**. It is conservative for general photography: moderate headroom, moderate HDR strength, strong protection, and automatic gain-map resolution.
 
-- **Natural**: balanced, low-risk synthetic HDR for general photos.
+- **Natural**: balanced, low-risk synthetic HDR for general photography.
 - **Bright**: stronger highlights and headroom, still suitable for normal images.
 - **Extreme**: exaggerated output intended for stress testing or stylized results.
 
@@ -151,7 +151,9 @@ GitHub Pages remains a static deployment. There is no backend API, no server-sid
 
 ## How to Verify Exported HEIC
 
-macOS Preview and Quick Look can depend on macOS version and are not always reliable validators for Apple HDR gain-map HEIC rendering. Prefer macOS Photos or iOS Photos for visual HDR validation.
+Visual HDR rendering depends on the viewer, display, operating system version, and metadata support. Some compatible viewers may show only the SDR base image or render the gain map differently.
+
+On Apple platforms, Preview and Quick Look can depend on macOS version and are not always reliable validators for HDR gain-map HEIC rendering. Photos on macOS or iOS may be useful for visual HDR validation, but exported files should not be assumed to render correctly in every environment.
 
 For metadata and container checks, install the local tools and run:
 
@@ -165,7 +167,7 @@ Useful signs in the output:
 - `AuxiliaryImageType: urn:com:apple:photo:2020:aux:hdrgainmap`
 - `HDRGainMapVersion`
 - `HDRGainMapHeadroom`
-- `auxC` with the Apple HDR gain-map URN
+- `auxC` with the HDR gain-map URN
 - `auxl` reference linking the auxiliary gain-map image item to the primary image item
 - extracted auxiliary gain-map image from `heif-convert --with-aux`
 - `MakerApple` / `Apple` `HDRHeadroom` and `HDRGain`, if the current WASM encoder build includes the MakerNote metadata path
@@ -177,8 +179,7 @@ Use the app's debug gain-map preview and metadata checks together when diagnosin
 - `src/`: React UI, local gain-map preview logic, i18n, and Web Worker integration.
 - `src/workers/bypassWorker.ts`: browser-only preview and HEIC export pipeline.
 - `native/libheif-x265/`: Emscripten bridge for the browser WASM HEIC encoder.
-- `public/encoders/apple-hdr-heic.js`: static WASM loader served by the browser.
-- `public/encoders/apple-hdr-heic.wasm`: static browser encoder module.
+- `public/encoders/`: static WASM loader and browser encoder module.
 - `scripts/check-heic-hdr.sh`: local HEIC metadata and auxiliary-image validation helper.
 
 The project refactors the Swift/CoreImage/Metal flow from [`toGainMapHDR`](https://github.com/chemharuka/toGainMapHDR) into portable browser layers.
@@ -190,3 +191,7 @@ This repository is distributed under the GNU General Public License version 2 or
 The published browser HEIC encoder links `x265`, which is GPL v2 or later and is also available from its authors under a commercial proprietary license. It also links `libheif`, whose library code is LGPL. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled encoder dependency notes.
 
 HEVC encoding and distribution may involve patent or platform licensing obligations depending on where and how the app is distributed. This repository does not grant patent rights and this README is not legal advice.
+
+## Trademark Notice
+
+This project is not affiliated with, endorsed by, or sponsored by Apple Inc. Apple, Photos, macOS, iOS, iPhone, iPad, Quick Look, Preview, and related names are trademarks of Apple Inc. References to these names are used only for compatibility and technical verification purposes.
