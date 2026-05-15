@@ -1,4 +1,4 @@
-# libheif + x265 browser WASM encoder
+# LumaHEIC libheif + x265 browser WASM encoder
 
 This folder contains the native bridge for the production browser-only HEIC encoder.
 
@@ -9,7 +9,7 @@ The web app does not call a server-side encoder. Once this WASM module is built,
 Run from WSL/Linux with Emscripten active:
 
 ```bash
-cd hdr-heic-bypass
+cd luma-heic
 source ~/emsdk/emsdk_env.sh
 bash scripts/build-libheif-x265-wasm.sh
 npm run build
@@ -27,4 +27,4 @@ The bridge encodes a primary HEIC image, a monochrome auxiliary gain map image, 
 
 ## License note
 
-`libheif` is LGPL. `x265` is GPL and HEVC may carry patent/licensing obligations depending on how and where the app is distributed. Review distribution requirements before publishing the browser WASM encoder.
+`libheif` is LGPL. `x265` is GPL v2 or later and is also available from its authors under a commercial proprietary license. HEVC may carry patent/licensing obligations depending on how and where the app is distributed. Review distribution requirements before publishing the browser WASM encoder.

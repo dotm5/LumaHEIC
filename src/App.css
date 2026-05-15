@@ -13,6 +13,21 @@
   border-bottom: 1px solid var(--border);
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-icon {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(11, 22, 27, 0.14);
+}
+
 .eyebrow {
   color: var(--muted);
   font-size: 13px;
@@ -327,6 +342,12 @@
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .brand-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
   }
 
   .topbar-actions {

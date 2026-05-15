@@ -228,9 +228,12 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">{t.appEyebrow}</p>
-          <h1>{t.appTitle}</h1>
+        <div className="brand-lockup">
+          <img className="brand-icon" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" aria-hidden="true" />
+          <div>
+            <p className="eyebrow">{t.appEyebrow}</p>
+            <h1>{t.appTitle}</h1>
+          </div>
         </div>
         <div className="topbar-actions">
           <div className="language-switch" aria-label="Language">

@@ -237,7 +237,7 @@ function contentType(filePath) {
 }
 
 function withExtension(name, ext) {
-  const cleanName = name || 'bypass-hdr'
+  const cleanName = name || 'luma-heic'
   const dot = cleanName.lastIndexOf('.')
   const stem = dot > 0 ? cleanName.slice(0, dot) : cleanName
   return `${stem}${ext}`

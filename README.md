@@ -1,29 +1,39 @@
-# HDR HEIC Bypass
+# LumaHEIC
 
-Browser-only prototype for converting a single JPEG/PNG into an Apple HDR gain-map HEIC.
+<p align="center">
+  <img src="public/favicon.svg" alt="LumaHEIC icon" width="96" height="96">
+</p>
 
-The app is designed for static hosting. GitHub Pages serves only HTML, CSS, JavaScript, and WASM files. Images are never uploaded to a server: decoding, gain-map generation, preview rendering, and HEIC encoding all run locally in the user's browser, inside a Web Worker and the `libheif + x265` WASM encoder.
+[![Deploy GitHub Pages](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml/badge.svg)](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml)
+[![License: GPL v2 or later](https://img.shields.io/badge/License-GPL_v2_or_later-blue.svg)](LICENSE)
 
-The project refactors the Swift/CoreImage/Metal flow from [`toGainMapHDR`](https://github.com/chemharuka/toGainMapHDR) into portable browser layers:
+LumaHEIC is a browser-only Apple HDR gain-map HEIC exporter for turning a single JPEG or PNG into a Photos-friendly HEIC with an Apple HDR gain-map auxiliary image.
 
-- `crates/bypass-core`: Rust implementation of the single-image gain map math.
-- `src/lib/gainMap.ts`: TypeScript implementation used for local UI preview work.
-- `src/workers/bypassWorker.ts`: Web Worker pipeline for preview generation and browser-side encoding.
-- `native/libheif-x265`: Emscripten bridge for the browser WASM HEIC encoder.
-- `public/encoders/apple-hdr-heic.js` and `public/encoders/apple-hdr-heic.wasm`: static encoder assets loaded by the browser.
+The app is designed for static hosting. GitHub Pages serves only HTML, CSS, JavaScript, and WASM files. Images are never uploaded to any server: decoding, gain-map generation, preview rendering, and HEIC encoding all run locally in the user's browser, inside a Web Worker and the `libheif + x265` WASM encoder.
 
-## Current behavior
+## What it does
 
-1. Upload a JPEG or PNG.
-2. Adjust HDR strength, highlight threshold, transition softness, peak headroom, and color protection.
-3. Preview the SDR base, generated gain map, and HDR reference.
-4. Export `.heic` using the browser WASM encoder.
+- Builds an Apple-style HDR gain map from one SDR source image.
+- Exports `.heic` in the browser through the bundled WASM encoder.
+- Writes the Apple HDR gain-map auxiliary image, XMP metadata, and MakerApple HDR metadata paths used by the native encoder.
+- Provides English and Chinese UI text.
+- Keeps GitHub Pages deployment fully static, with no backend API and no upload path.
 
-If the encoder files are missing or fail to load, the UI reports that the browser HEIC encoder is unavailable. The app does not fall back to a backend API and does not treat `.gainmap.json` as a successful default export.
+The generated HDR look is synthetic. LumaHEIC does not recover true scene HDR information that was not present in the source image.
 
-The bypass mode synthesizes an HDR look from a single SDR input. It does not recover true scene HDR information.
+## Documentation
 
-## Local development
+### Try it
+
+The current GitHub Pages deployment is:
+
+```text
+https://dotm5.github.io/hdr-heic-bypass/
+```
+
+The repository path is still `hdr-heic-bypass`; if the GitHub repository is renamed later, update `VITE_BASE_PATH` and the Pages workflow to match the new slug.
+
+### Local development
 
 ```bash
 npm install
@@ -32,7 +42,7 @@ npm test
 npm run build
 ```
 
-## Build the browser HEIC encoder
+### Build the browser HEIC encoder
 
 Use WSL/Linux with Emscripten, CMake, Ninja, and Git:
 
@@ -44,9 +54,9 @@ npm run build
 
 The encoder output is written to `public/encoders/` and loaded relative to `import.meta.env.BASE_URL`, so GitHub Pages subpaths work.
 
-## GitHub Pages
+### GitHub Pages
 
-Set `VITE_BASE_PATH` to the repository path:
+For the current repository slug:
 
 ```bash
 VITE_BASE_PATH=/hdr-heic-bypass/ npm run build
@@ -75,6 +85,21 @@ Useful signs in the output:
 - extracted auxiliary gain-map image from `heif-convert --with-aux`
 - `MakerApple` / `Apple` `HDRHeadroom` and `HDRGain`, if the current WASM encoder build includes the MakerNote metadata path
 
-## License and distribution
+## Project layout
 
-This app code is MIT-compatible prototype code. The browser HEIC encoder links `libheif` and `x265`; `x265` is GPL, and HEVC may have patent/licensing obligations. Review distribution requirements before publishing or redistributing the WASM encoder.
+- `src/`: React UI, local gain-map preview logic, i18n, and Web Worker integration.
+- `src/workers/bypassWorker.ts`: browser-only preview and HEIC export pipeline.
+- `native/libheif-x265/`: Emscripten bridge for the browser WASM HEIC encoder.
+- `public/encoders/apple-hdr-heic.js`: static WASM loader served by the browser.
+- `public/encoders/apple-hdr-heic.wasm`: static browser encoder module.
+- `scripts/check-heic-hdr.sh`: local HEIC metadata and auxiliary-image validation helper.
+
+The project refactors the Swift/CoreImage/Metal flow from [`toGainMapHDR`](https://github.com/chemharuka/toGainMapHDR) into portable browser layers.
+
+## Terms and license
+
+This repository is distributed under the GNU General Public License version 2 or later. See [LICENSE](LICENSE).
+
+The published browser HEIC encoder links `x265`, which is GPL v2 or later and is also available from its authors under a commercial proprietary license. It also links `libheif`, whose library code is LGPL. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled encoder dependency notes.
+
+HEVC encoding and distribution may involve patent or platform licensing obligations depending on where and how the app is distributed. This repository does not grant patent rights and this README is not legal advice.

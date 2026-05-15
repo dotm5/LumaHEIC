@@ -65,7 +65,7 @@ std::string build_xmp(float headroom) {
   char stops_buf[32];
   std::snprintf(stops_buf, sizeof(stops_buf), "%.6f", stops);
   std::string xmp;
-  xmp += "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"HDR HEIC Bypass\">";
+  xmp += "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"LumaHEIC\">";
   xmp += "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">";
   xmp += "<rdf:Description rdf:about=\"\" xmlns:HDRGainMap=\"http://ns.apple.com/HDRGainMap/1.0/\">";
   xmp += "<HDRGainMap:HDRGainMapVersion>131072</HDRGainMap:HDRGainMapVersion>";
@@ -132,10 +132,10 @@ std::vector<uint8_t> build_exif(float headroom) {
   constexpr uint32_t kIfd0Offset = 8;
   constexpr uint32_t kIfd0EntryCount = 3;
   constexpr uint32_t kIfd0DataOffset = kIfd0Offset + 2 + kIfd0EntryCount * 12 + 4;
-  constexpr const char* kMake = "Apple";
-  constexpr const char* kSoftware = "HDR HEIC Bypass";
-  constexpr uint32_t kMakeLength = 6;
-  constexpr uint32_t kSoftwareLength = 16;
+  constexpr char kMake[] = "Apple";
+  constexpr char kSoftware[] = "LumaHEIC";
+  constexpr uint32_t kMakeLength = sizeof(kMake);
+  constexpr uint32_t kSoftwareLength = sizeof(kSoftware);
   constexpr uint32_t kMakeOffset = kIfd0DataOffset;
   constexpr uint32_t kSoftwareOffset = kMakeOffset + kMakeLength;
   constexpr uint32_t kExifIfdOffset = kSoftwareOffset + kSoftwareLength;

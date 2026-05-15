@@ -2,7 +2,7 @@ import type { RgbaImage } from './gainMap'
 
 export async function decodeImageFile(file: File): Promise<RgbaImage> {
   if (!/^image\/(jpeg|png)$/.test(file.type) && !/\.(jpe?g|png)$/i.test(file.name)) {
-    throw new Error('Only JPEG and PNG inputs are supported in bypass mode.')
+    throw new Error('Only JPEG and PNG inputs are supported.')
   }
 
   const bitmap = await createBitmap(file)
