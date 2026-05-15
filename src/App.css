@@ -74,6 +74,7 @@
 
 .repo-link,
 .download-action,
+.mini-action,
 .primary-action {
   display: inline-flex;
   align-items: center;
@@ -107,6 +108,37 @@
   background: var(--surface-muted);
 }
 
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.mode-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mode-switch button.active {
+  color: var(--text-strong);
+  background: var(--surface-muted);
+}
+
+.drop-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .drop-zone {
   display: grid;
   place-items: center;
@@ -117,6 +149,10 @@
   color: var(--text-strong);
   background: var(--surface);
   cursor: pointer;
+}
+
+.secondary-drop {
+  min-height: 104px;
 }
 
 .drop-zone svg {
@@ -165,12 +201,42 @@
   height: 18px;
 }
 
+.control-section {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.control-section h3,
+.control-section summary {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.control-section summary {
+  cursor: pointer;
+}
+
+.control-section[open] {
+  display: grid;
+}
+
+.control-section[open] summary {
+  margin-bottom: 2px;
+}
+
 .slider-row {
   display: grid;
   gap: 8px;
 }
 
-.slider-row span {
+.slider-row span,
+.select-row span {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -187,6 +253,23 @@
   accent-color: var(--accent);
 }
 
+.select-row {
+  display: grid;
+  gap: 8px;
+}
+
+.select-row select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--text-strong);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+}
+
 .debug-toggle {
   display: flex;
   align-items: center;
@@ -197,6 +280,34 @@
 
 .debug-toggle input {
   accent-color: var(--accent);
+}
+
+.debug-section {
+  background: transparent;
+}
+
+.debug-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.debug-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.debug-list dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.debug-list dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .primary-action {
@@ -216,8 +327,15 @@
   background: var(--surface);
 }
 
+.mini-action {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
 .primary-action svg,
-.download-action svg {
+.download-action svg,
+.mini-action svg {
   width: 18px;
   height: 18px;
 }

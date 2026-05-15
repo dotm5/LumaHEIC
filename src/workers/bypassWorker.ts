@@ -1,6 +1,6 @@
 import { encodeAppleHdrHeic } from '../encoders/appleHeicEncoder'
-import type { BypassOptions, RgbaImage } from '../lib/gainMap'
-import { generateBypassGainMap } from '../lib/gainMap'
+import type { BypassOptions, InputMode, RgbaImage } from '../lib/gainMap'
+import { authorBasePlusGainMap, generateBypassGainMap } from '../lib/gainMap'
 
 type WorkerScope = {
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null
@@ -12,8 +12,10 @@ const scope = self as unknown as WorkerScope
 type ProcessRequest = {
   type: 'process'
   id: number
+  mode: InputMode
   sourceName: string
   image: RgbaImage
+  gainMapImage?: RgbaImage
   options: BypassOptions
   quality: number
   encode: boolean
@@ -31,7 +33,10 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   try {
     postProgress(request.id, 'Generating Apple-style gain map')
-    const result = generateBypassGainMap(request.image, request.options)
+    const result =
+      request.mode === 'base-plus-gain-map'
+        ? authorBasePlusGainMap(request.image, requireGainMapImage(request.gainMapImage), request.options)
+        : generateBypassGainMap(request.image, request.options)
 
     if (!request.encode) {
       scope.postMessage(
@@ -80,4 +85,9 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       message: error instanceof Error ? error.message : String(error),
     })
   }
+}
+
+function requireGainMapImage(image: RgbaImage | undefined) {
+  if (!image) throw new Error('Base + Gain Map mode requires a gain map image.')
+  return image
 }

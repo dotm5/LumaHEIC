@@ -9,19 +9,58 @@
 
 **Language:** English | [简体中文](README_CN.md)
 
-LumaHEIC is a browser-only Apple HDR gain-map HEIC exporter for turning a single JPEG or PNG into a Photos-friendly HEIC with an Apple HDR gain-map auxiliary image.
+LumaHEIC is a browser-only Apple HDR gain-map HEIC exporter for turning SDR images into Photos-friendly HEIC files with an Apple HDR gain-map auxiliary image.
 
 The app is designed for static hosting. GitHub Pages serves only HTML, CSS, JavaScript, and WASM files. Images are never uploaded to any server: decoding, gain-map generation, preview rendering, and HEIC encoding all run locally in the user's browser, inside a Web Worker and the `libheif + x265` WASM encoder.
 
 ## What it does
 
 - Builds an Apple-style HDR gain map from one SDR source image.
+- Authors HEIC from an SDR base image plus an uploaded grayscale gain map.
 - Exports `.heic` in the browser through the bundled WASM encoder.
 - Writes the Apple HDR gain-map auxiliary image, XMP metadata, and MakerApple HDR metadata paths used by the native encoder.
 - Provides English and Chinese UI text.
 - Keeps GitHub Pages deployment fully static, with no backend API and no upload path.
 
 The generated HDR look is synthetic. LumaHEIC does not recover true scene HDR information that was not present in the source image.
+
+## Authoring modes
+
+### Single Image Enhance
+
+Use one JPEG or PNG as the SDR base. The browser generates a synthetic HDR gain map locally, previews the SDR base / gain map / HDR reference, and sends the base plus 8-bit gain-map luma to the WASM `libheif + x265` encoder.
+
+### Base + Gain Map
+
+Use one SDR base JPEG/PNG and one grayscale gain map JPEG/PNG. Black is interpreted as `1x` gain, white is interpreted as the selected max headroom, and middle values use log2 gain encoding:
+
+```text
+encoded = log2(gain) / log2(maxHeadroom)
+gain = maxHeadroom ^ encoded
+```
+
+This mode currently covers Base + Gain Map authoring only. Base + HDR Target authoring is a roadmap item.
+
+## Presets
+
+The default preset is **Natural**. It is conservative for general photography: moderate headroom, moderate HDR strength, strong protection, and automatic gain-map resolution.
+
+- **Natural**: balanced, low-risk synthetic HDR for general photos.
+- **Bright**: stronger highlights and headroom, still suitable for normal images.
+- **Extreme**: exaggerated output intended for stress testing or stylized results.
+
+After choosing a preset, every parameter remains editable. A manual edit moves the UI into a custom preset state.
+
+## Gain-map resolution
+
+The gain-map auxiliary image can be generated at different resolutions:
+
+- **Auto**: half size for images up to 1200 px long edge, 720 px long edge up to 3000 px, 1080 px up to 6000 px, and 1440 px above that.
+- **480p / 720p / 1080p**: cap the gain-map long edge to that size.
+- **Quarter / Half / Full**: use a fixed fraction of the base dimensions or the full base size.
+- **Custom**: type is reserved for a future UI.
+
+All modes preserve aspect ratio, keep dimensions at least 1 px, and do not exceed the base image dimensions. Sparse highlights use a mixed average/max downsample path so small bright points are not fully averaged away.
 
 ## Documentation
 
@@ -68,7 +107,7 @@ GitHub Pages remains a static deployment. There is no `/api/encode-heic` route a
 
 ## How to verify exported HEIC
 
-macOS Preview is not always a reliable validator for Apple HDR gain-map HEIC rendering. Prefer macOS Photos or iOS Photos for visual HDR validation.
+macOS Preview and Quick Look can depend on macOS version and are not always reliable validators for Apple HDR gain-map HEIC rendering. Prefer macOS Photos or iOS Photos for visual HDR validation.
 
 For metadata and container checks, install the local tools and run:
 
@@ -86,6 +125,8 @@ Useful signs in the output:
 - `auxl` reference linking the auxiliary gain-map image item to the primary image item
 - extracted auxiliary gain-map image from `heif-convert --with-aux`
 - `MakerApple` / `Apple` `HDRHeadroom` and `HDRGain`, if the current WASM encoder build includes the MakerNote metadata path
+
+Use the app's debug gain-map preview and metadata checks together when diagnosing whether an issue is gain-map content, HEIC auxiliary-image wiring, or platform rendering support.
 
 ## Project layout
 

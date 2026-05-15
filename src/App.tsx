@@ -1,6 +1,15 @@
 import { Download, FileImage, ImageUp, Loader2, SlidersHorizontal, Sparkles } from 'lucide-react'
 import React from 'react'
 import './App.css'
+import {
+  defaultPresetId,
+  gainMapResolutionModes,
+  hdrPresets,
+  type GainMapResolutionMode,
+  type InputMode,
+  type PresetId,
+  type PresetSelection,
+} from './lib/authoring'
 import type { HeicEncodeResult } from './lib/encoderTypes'
 import {
   defaultBypassOptions,
@@ -45,17 +54,20 @@ const worker = new Worker(new URL('./workers/bypassWorker.ts', import.meta.url),
 let nextRequestId = 1
 const showDebugControls = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug')
 const extremeGainMapOptions: BypassOptions = {
+  ...hdrPresets.extreme,
   headroom: 8,
-  intensity: 1,
-  threshold: 0.2,
-  softness: 0.1,
-  colorProtection: 0,
+  strength: 1,
+  gainMapResolutionMode: 'full',
 }
 
 function App() {
   const [language, setLanguage] = React.useState<Language>(() => getInitialLanguage())
+  const [inputMode, setInputMode] = React.useState<InputMode>('single-image-enhance')
+  const [currentPreset, setCurrentPreset] = React.useState<PresetSelection>(defaultPresetId)
   const [sourceName, setSourceName] = React.useState('')
   const [sourceImage, setSourceImage] = React.useState<RgbaImage | null>(null)
+  const [gainMapName, setGainMapName] = React.useState('')
+  const [gainMapImage, setGainMapImage] = React.useState<RgbaImage | null>(null)
   const [options, setOptions] = React.useState<BypassOptions>(defaultBypassOptions)
   const [extremeGainMap, setExtremeGainMap] = React.useState(false)
   const [quality, setQuality] = React.useState(82)
@@ -69,6 +81,7 @@ function App() {
 
   const encoderReady = encoderCheck === 'ready'
   const t = translations[language]
+  const canProcess = Boolean(sourceImage && (inputMode === 'single-image-enhance' || gainMapImage))
 
   React.useEffect(() => {
     document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
@@ -148,10 +161,23 @@ function App() {
 
   const setExtremeDebugMode = (enabled: boolean) => {
     setExtremeGainMap(enabled)
+    setCurrentPreset(enabled ? 'custom' : defaultPresetId)
     setOptions(enabled ? extremeGainMapOptions : defaultBypassOptions)
   }
 
-  const handleFile = async (file: File | null) => {
+  const applyPreset = (presetId: PresetId) => {
+    setCurrentPreset(presetId)
+    setExtremeGainMap(false)
+    setOptions(hdrPresets[presetId])
+  }
+
+  const updateOptions = (patch: Partial<BypassOptions>) => {
+    setCurrentPreset('custom')
+    setExtremeGainMap(false)
+    setOptions((state) => ({ ...state, ...patch }))
+  }
+
+  const handleImageFile = async (file: File | null, target: 'source' | 'gain-map') => {
     if (!file) return
     setBusy(true)
     setError(null)
@@ -162,14 +188,26 @@ function App() {
     try {
       setStatus({ key: 'statusDecodingSource' })
       const decoded = await decodeImageFile(file)
-      const signal = detectUsefulGain(decoded)
-      setSourceName(file.name)
-      setSourceImage(decoded)
-      setStatus(
-        signal.isLowDynamicRange
-          ? { key: 'statusImageDecodedLowLuminance' }
-          : { key: 'statusImageDecodedPreview' },
-      )
+      if (target === 'gain-map') {
+        setGainMapName(file.name)
+        setGainMapImage(decoded)
+        setStatus({ key: 'statusGainMapDecodedPreview' })
+      } else {
+        const signal = detectUsefulGain(decoded)
+        setSourceName(file.name)
+        setSourceImage(decoded)
+        setStatus(
+          signal.isLowDynamicRange
+            ? { key: 'statusImageDecodedLowLuminance' }
+            : { key: 'statusImageDecodedPreview' },
+        )
+      }
+      if (
+        (target === 'source' && inputMode === 'base-plus-gain-map' && !gainMapImage) ||
+        (target === 'gain-map' && !sourceImage)
+      ) {
+        setBusy(false)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setStatus({ key: 'statusCouldNotLoadImage' })
@@ -179,6 +217,7 @@ function App() {
 
   const processImage = React.useCallback((encode: boolean) => {
     if (!sourceImage) return
+    if (inputMode === 'base-plus-gain-map' && !gainMapImage) return
     if (encode && !encoderReady) {
       setError(t.errorBrowserEncoderUnavailable)
       setStatus({ key: 'statusExportUnavailable' })
@@ -197,32 +236,44 @@ function App() {
       height: sourceImage.height,
       data: new Uint8ClampedArray(sourceImage.data),
     }
+    const requestGainMapImage = gainMapImage
+      ? {
+          width: gainMapImage.width,
+          height: gainMapImage.height,
+          data: new Uint8ClampedArray(gainMapImage.data),
+        }
+      : undefined
     const id = nextRequestId++
+    const transfer = [requestImage.data.buffer as ArrayBuffer]
+    if (requestGainMapImage) transfer.push(requestGainMapImage.data.buffer as ArrayBuffer)
     worker.postMessage(
       {
         type: 'process',
         id,
+        mode: inputMode,
         sourceName,
         image: requestImage,
+        gainMapImage: requestGainMapImage,
         options,
         quality,
         encode,
       },
-      [requestImage.data.buffer as ArrayBuffer],
+      transfer,
     )
-  }, [encoderReady, options, quality, sourceImage, sourceName, t.errorBrowserEncoderUnavailable])
+  }, [encoderReady, gainMapImage, inputMode, options, quality, sourceImage, sourceName, t.errorBrowserEncoderUnavailable])
 
   React.useEffect(() => {
     if (!sourceImage) return
+    if (inputMode === 'base-plus-gain-map' && !gainMapImage) return
     const handle = window.setTimeout(() => {
       processImage(false)
     }, 140)
     return () => window.clearTimeout(handle)
-  }, [processImage, sourceImage])
+  }, [gainMapImage, inputMode, processImage, sourceImage])
 
   const onDrop = (event: React.DragEvent<HTMLLabelElement>) => {
     event.preventDefault()
-    handleFile(event.dataTransfer.files[0] ?? null)
+    handleImageFile(event.dataTransfer.files[0] ?? null, 'source')
   }
 
   return (
@@ -256,15 +307,45 @@ function App() {
 
       <section className="workspace">
         <aside className="control-panel">
-          <label className="drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
-            <ImageUp aria-hidden="true" />
-            <span>{sourceName || t.chooseImage}</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-              onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
-            />
-          </label>
+          <div className="mode-switch" aria-label={t.inputMode}>
+            <button
+              className={inputMode === 'single-image-enhance' ? 'active' : undefined}
+              type="button"
+              onClick={() => setInputMode('single-image-enhance')}
+            >
+              {t.singleImageEnhance}
+            </button>
+            <button
+              className={inputMode === 'base-plus-gain-map' ? 'active' : undefined}
+              type="button"
+              onClick={() => setInputMode('base-plus-gain-map')}
+            >
+              {t.basePlusGainMap}
+            </button>
+          </div>
+
+          <div className="drop-stack">
+            <label className="drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
+              <ImageUp aria-hidden="true" />
+              <span>{sourceName || (inputMode === 'base-plus-gain-map' ? t.chooseBaseImage : t.chooseImage)}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                onChange={(event) => handleImageFile(event.target.files?.[0] ?? null, 'source')}
+              />
+            </label>
+            {inputMode === 'base-plus-gain-map' && (
+              <label className="drop-zone secondary-drop" onDragOver={(event) => event.preventDefault()}>
+                <FileImage aria-hidden="true" />
+                <span>{gainMapName || t.chooseGainMapImage}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                  onChange={(event) => handleImageFile(event.target.files?.[0] ?? null, 'gain-map')}
+                />
+              </label>
+            )}
+          </div>
 
           <p className={encoderReady ? 'encoder-status ready' : 'encoder-status'}>
             {encoderCheck === 'checking' && t.encoderChecking}
@@ -277,60 +358,217 @@ function App() {
             <h2>{t.controlsHeading}</h2>
           </div>
 
-          <Slider
-            label={t.hdrStrength}
-            value={options.intensity}
-            min={0}
-            max={1}
-            step={0.01}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(intensity) => setOptions((state) => ({ ...state, intensity }))}
-          />
-          <Slider
-            label={t.highlightThreshold}
-            value={options.threshold}
-            min={0.05}
-            max={0.95}
-            step={0.01}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(threshold) => setOptions((state) => ({ ...state, threshold }))}
-          />
-          <Slider
-            label={t.transitionSoftness}
-            value={options.softness}
-            min={0.02}
-            max={0.8}
-            step={0.01}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(softness) => setOptions((state) => ({ ...state, softness }))}
-          />
-          <Slider
-            label={t.peakHeadroom}
-            value={options.headroom}
-            min={1.05}
-            max={8}
-            step={0.05}
-            format={(v) => `${v.toFixed(2)}x`}
-            onChange={(headroom) => setOptions((state) => ({ ...state, headroom }))}
-          />
-          <Slider
-            label={t.colorProtection}
-            value={options.colorProtection}
-            min={0}
-            max={1}
-            step={0.01}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(colorProtection) => setOptions((state) => ({ ...state, colorProtection }))}
-          />
+          <section className="control-section">
+            <h3>{t.basicControls}</h3>
+            <SelectRow
+              label={t.preset}
+              value={currentPreset}
+              onChange={(value) => {
+                if (value !== 'custom') applyPreset(value as PresetId)
+              }}
+              options={[
+                ...Object.keys(hdrPresets).map((id) => ({
+                  value: id,
+                  label: t[presetTranslationKey(id as PresetId)],
+                })),
+                ...(currentPreset === 'custom' ? [{ value: 'custom', label: t.customPreset }] : []),
+              ]}
+            />
+            <Slider
+              label={t.exposure}
+              value={options.exposure}
+              min={-1}
+              max={1}
+              step={0.01}
+              format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)} EV`}
+              onChange={(exposure) => updateOptions({ exposure })}
+            />
+            <Slider
+              label={t.highlights}
+              value={options.highlights}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(highlights) => updateOptions({ highlights })}
+            />
+            <Slider
+              label={t.whites}
+              value={options.whites}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(whites) => updateOptions({ whites })}
+            />
+            <Slider
+              label={t.shadows}
+              value={options.shadows}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(shadows) => updateOptions({ shadows })}
+            />
+            <Slider
+              label={t.blacks}
+              value={options.blacks}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(blacks) => updateOptions({ blacks })}
+            />
+            <Slider
+              label={t.hdrStrength}
+              value={options.strength}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(strength) => updateOptions({ strength })}
+            />
+            <Slider
+              label={t.peakHeadroom}
+              value={options.headroom}
+              min={1.05}
+              max={8}
+              step={0.05}
+              format={(v) => `${v.toFixed(2)}x`}
+              onChange={(headroom) => updateOptions({ headroom })}
+            />
+            <Slider
+              label={t.glow}
+              value={options.glow}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(glow) => updateOptions({ glow })}
+            />
+            <Slider
+              label={t.protection}
+              value={(options.shadowProtect + options.saturationProtect + options.skinProtect) / 3}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(protection) =>
+                updateOptions({
+                  shadowProtect: protection,
+                  saturationProtect: protection,
+                  skinProtect: protection,
+                })
+              }
+            />
+          </section>
+
+          <details className="control-section" open>
+            <summary>{t.advancedControls}</summary>
+            <Slider
+              label={t.highlightStart}
+              value={options.highlightStart}
+              min={0.05}
+              max={0.95}
+              step={0.01}
+              format={formatPercent}
+              onChange={(highlightStart) => updateOptions({ highlightStart })}
+            />
+            <Slider
+              label={t.highlightEnd}
+              value={options.highlightEnd}
+              min={0.05}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(highlightEnd) => updateOptions({ highlightEnd })}
+            />
+            <Slider
+              label={t.shadowProtect}
+              value={options.shadowProtect}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(shadowProtect) => updateOptions({ shadowProtect })}
+            />
+            <Slider
+              label={t.saturationProtect}
+              value={options.saturationProtect}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(saturationProtect) => updateOptions({ saturationProtect })}
+            />
+            <Slider
+              label={t.skinProtect}
+              value={options.skinProtect}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(skinProtect) => updateOptions({ skinProtect })}
+            />
+            <Slider
+              label={t.edgeSmoothRadius}
+              value={options.edgeSmoothRadius}
+              min={0}
+              max={40}
+              step={1}
+              format={(v) => `${Math.round(v)} px`}
+              onChange={(edgeSmoothRadius) => updateOptions({ edgeSmoothRadius })}
+            />
+            <Slider
+              label={t.smallHighlightPreserve}
+              value={options.smallHighlightPreserve}
+              min={0}
+              max={1}
+              step={0.01}
+              format={formatPercent}
+              onChange={(smallHighlightPreserve) => updateOptions({ smallHighlightPreserve })}
+            />
+            <SelectRow
+              label={t.gainMapResolution}
+              value={options.gainMapResolutionMode}
+              onChange={(gainMapResolutionMode) =>
+                updateOptions({ gainMapResolutionMode: gainMapResolutionMode as GainMapResolutionMode })
+              }
+              options={gainMapResolutionModes.map((mode) => ({
+                value: mode,
+                label: t[resolutionTranslationKey(mode)],
+                disabled: mode === 'custom',
+              }))}
+            />
+          </details>
           {showDebugControls && (
-            <label className="debug-toggle">
-              <input
-                type="checkbox"
-                checked={extremeGainMap}
-                onChange={(event) => setExtremeDebugMode(event.target.checked)}
-              />
-              <span>{t.extremeGainDebug}</span>
-            </label>
+            <section className="control-section debug-section">
+              <h3>{t.debugControls}</h3>
+              <label className="debug-toggle">
+                <input
+                  type="checkbox"
+                  checked={extremeGainMap}
+                  onChange={(event) => setExtremeDebugMode(event.target.checked)}
+                />
+                <span>{t.extremeGainDebug}</span>
+              </label>
+              <dl className="debug-list">
+                <div>
+                  <dt>{t.currentPreset}</dt>
+                  <dd>{currentPreset === 'custom' ? t.customPreset : t[presetTranslationKey(currentPreset)]}</dd>
+                </div>
+                <div>
+                  <dt>{t.gainMapOutputSize}</dt>
+                  <dd>{result ? `${result.gainMap.width} x ${result.gainMap.height}` : '-'}</dd>
+                </div>
+              </dl>
+              {preview?.gainUrl && (
+                <a className="mini-action" download={withSuffix(sourceName, '-gain-map.png')} href={preview.gainUrl}>
+                  <Download aria-hidden="true" />
+                  {t.downloadGainMapPng}
+                </a>
+              )}
+            </section>
           )}
           <Slider
             label={t.heicQuality}
@@ -342,7 +580,7 @@ function App() {
             onChange={(nextQuality) => setQuality(nextQuality)}
           />
 
-          <button className="primary-action" disabled={!sourceImage || busy || !encoderReady} onClick={() => processImage(true)}>
+          <button className="primary-action" disabled={!canProcess || busy || !encoderReady} onClick={() => processImage(true)}>
             {busy ? <Loader2 className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
             {t.exportHeic}
           </button>
@@ -420,6 +658,31 @@ function Slider({
   )
 }
 
+function SelectRow({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: { value: string; label: string; disabled?: boolean }[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="select-row">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function Preview({ title, url }: { title: string; url?: string }) {
   return (
     <article className="preview-tile">
@@ -430,6 +693,28 @@ function Preview({ title, url }: { title: string; url?: string }) {
       {url ? <img src={url} alt={title} /> : <div className="empty-preview" />}
     </article>
   )
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`
+}
+
+function presetTranslationKey(id: PresetId) {
+  return `preset${id[0].toUpperCase()}${id.slice(1)}` as TranslationKey
+}
+
+function resolutionTranslationKey(mode: GainMapResolutionMode) {
+  const keys: Record<GainMapResolutionMode, TranslationKey> = {
+    auto: 'resolutionAuto',
+    '480p': 'resolution480p',
+    '720p': 'resolution720p',
+    '1080p': 'resolution1080p',
+    quarter: 'resolutionQuarter',
+    half: 'resolutionHalf',
+    full: 'resolutionFull',
+    custom: 'resolutionCustom',
+  }
+  return keys[mode]
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -475,6 +760,13 @@ function toArrayBuffer(bytes: Uint8Array) {
   const copy = new Uint8Array(bytes.byteLength)
   copy.set(bytes)
   return copy.buffer
+}
+
+function withSuffix(name: string, suffix: string) {
+  const cleanName = name || 'luma-heic'
+  const dot = cleanName.lastIndexOf('.')
+  const stem = dot > 0 ? cleanName.slice(0, dot) : cleanName
+  return `${stem}${suffix}`
 }
 
 export default App
