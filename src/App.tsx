@@ -1,6 +1,7 @@
 import { Download, FileImage, ImageUp, Loader2, SlidersHorizontal, Sparkles } from 'lucide-react'
 import React from 'react'
 import './App.css'
+import { ParameterField } from './components/ParameterField'
 import {
   defaultPresetId,
   gainMapResolutionModes,
@@ -26,6 +27,7 @@ import {
   type Language,
   type TranslationKey,
 } from './lib/i18n'
+import { parameterHelp, type ParameterHelpCopy } from './lib/parameterHelp'
 import { decodeImageFile, imageToPngUrl } from './lib/imageIo'
 
 type PreviewState = {
@@ -83,6 +85,7 @@ function App() {
 
   const encoderReady = encoderCheck === 'ready'
   const t = translations[language]
+  const help = parameterHelp[language]
   const canProcess = Boolean(sourceImage && (inputMode === 'single-image-enhance' || gainMapImage))
 
   React.useEffect(() => {
@@ -306,22 +309,28 @@ function App() {
 
       <section className="workspace">
         <aside className="control-panel">
-          <div className="mode-switch" aria-label={t.inputMode}>
-            <button
-              className={inputMode === 'single-image-enhance' ? 'active' : undefined}
-              type="button"
-              onClick={() => setInputMode('single-image-enhance')}
-            >
-              {t.singleImageEnhance}
-            </button>
-            <button
-              className={inputMode === 'base-plus-gain-map' ? 'active' : undefined}
-              type="button"
-              onClick={() => setInputMode('base-plus-gain-map')}
-            >
-              {t.basePlusGainMap}
-            </button>
-          </div>
+          <ParameterField language={language} label={t.inputMode} help={help.inputMode} className="mode-switch-field">
+            {(describedById) => (
+              <div className="mode-switch" aria-label={t.inputMode}>
+                <button
+                  className={inputMode === 'single-image-enhance' ? 'active' : undefined}
+                  type="button"
+                  aria-describedby={describedById}
+                  onClick={() => setInputMode('single-image-enhance')}
+                >
+                  {t.singleImageEnhance}
+                </button>
+                <button
+                  className={inputMode === 'base-plus-gain-map' ? 'active' : undefined}
+                  type="button"
+                  aria-describedby={describedById}
+                  onClick={() => setInputMode('base-plus-gain-map')}
+                >
+                  {t.basePlusGainMap}
+                </button>
+              </div>
+            )}
+          </ParameterField>
 
           <div className="drop-stack">
             <label className="drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
@@ -360,7 +369,9 @@ function App() {
           <section className="control-section">
             <h3>{t.basicControls}</h3>
             <SelectRow
+              language={language}
               label={t.preset}
+              help={help.preset}
               value={currentPreset}
               onChange={(value) => {
                 if (value !== 'custom') applyPreset(value as PresetId)
@@ -374,7 +385,9 @@ function App() {
               ]}
             />
             <Slider
+              language={language}
               label={t.exposure}
+              help={help.exposure}
               value={options.exposure}
               min={toneSliderMin}
               max={toneSliderMax}
@@ -383,7 +396,9 @@ function App() {
               onChange={(exposure) => updateOptions({ exposure })}
             />
             <Slider
+              language={language}
               label={t.highlights}
+              help={help.highlights}
               value={options.highlights}
               min={toneSliderMin}
               max={toneSliderMax}
@@ -392,7 +407,9 @@ function App() {
               onChange={(highlights) => updateOptions({ highlights })}
             />
             <Slider
+              language={language}
               label={t.whites}
+              help={help.whites}
               value={options.whites}
               min={toneSliderMin}
               max={toneSliderMax}
@@ -401,7 +418,9 @@ function App() {
               onChange={(whites) => updateOptions({ whites })}
             />
             <Slider
+              language={language}
               label={t.shadows}
+              help={help.shadows}
               value={options.shadows}
               min={toneSliderMin}
               max={toneSliderMax}
@@ -410,7 +429,9 @@ function App() {
               onChange={(shadows) => updateOptions({ shadows })}
             />
             <Slider
+              language={language}
               label={t.blacks}
+              help={help.blacks}
               value={options.blacks}
               min={toneSliderMin}
               max={toneSliderMax}
@@ -419,7 +440,9 @@ function App() {
               onChange={(blacks) => updateOptions({ blacks })}
             />
             <Slider
+              language={language}
               label={t.hdrStrength}
+              help={help.hdrStrength}
               value={options.strength}
               min={0}
               max={1}
@@ -428,7 +451,9 @@ function App() {
               onChange={(strength) => updateOptions({ strength })}
             />
             <Slider
+              language={language}
               label={t.peakHeadroom}
+              help={help.peakHeadroom}
               value={options.headroom}
               min={1.05}
               max={8}
@@ -437,7 +462,9 @@ function App() {
               onChange={(headroom) => updateOptions({ headroom })}
             />
             <Slider
+              language={language}
               label={t.glow}
+              help={help.glow}
               value={options.glow}
               min={0}
               max={1}
@@ -446,7 +473,9 @@ function App() {
               onChange={(glow) => updateOptions({ glow })}
             />
             <Slider
+              language={language}
               label={t.protection}
+              help={help.protection}
               value={(options.shadowProtect + options.saturationProtect + options.skinProtect) / 3}
               min={0}
               max={1}
@@ -465,7 +494,9 @@ function App() {
           <details className="control-section" open>
             <summary>{t.advancedControls}</summary>
             <Slider
+              language={language}
               label={t.highlightStart}
+              help={help.highlightStart}
               value={options.highlightStart}
               min={0.05}
               max={0.95}
@@ -474,7 +505,9 @@ function App() {
               onChange={(highlightStart) => updateOptions({ highlightStart })}
             />
             <Slider
+              language={language}
               label={t.highlightEnd}
+              help={help.highlightEnd}
               value={options.highlightEnd}
               min={0.05}
               max={1}
@@ -483,7 +516,9 @@ function App() {
               onChange={(highlightEnd) => updateOptions({ highlightEnd })}
             />
             <Slider
+              language={language}
               label={t.shadowProtect}
+              help={help.shadowProtect}
               value={options.shadowProtect}
               min={0}
               max={1}
@@ -492,7 +527,9 @@ function App() {
               onChange={(shadowProtect) => updateOptions({ shadowProtect })}
             />
             <Slider
+              language={language}
               label={t.saturationProtect}
+              help={help.saturationProtect}
               value={options.saturationProtect}
               min={0}
               max={1}
@@ -501,7 +538,9 @@ function App() {
               onChange={(saturationProtect) => updateOptions({ saturationProtect })}
             />
             <Slider
+              language={language}
               label={t.skinProtect}
+              help={help.skinProtect}
               value={options.skinProtect}
               min={0}
               max={1}
@@ -510,7 +549,9 @@ function App() {
               onChange={(skinProtect) => updateOptions({ skinProtect })}
             />
             <Slider
+              language={language}
               label={t.edgeSmoothRadius}
+              help={help.edgeSmoothRadius}
               value={options.edgeSmoothRadius}
               min={0}
               max={40}
@@ -519,7 +560,9 @@ function App() {
               onChange={(edgeSmoothRadius) => updateOptions({ edgeSmoothRadius })}
             />
             <Slider
+              language={language}
               label={t.smallHighlightPreserve}
+              help={help.smallHighlightPreserve}
               value={options.smallHighlightPreserve}
               min={0}
               max={1}
@@ -528,7 +571,9 @@ function App() {
               onChange={(smallHighlightPreserve) => updateOptions({ smallHighlightPreserve })}
             />
             <SelectRow
+              language={language}
               label={t.gainMapResolution}
+              help={help.gainMapResolution}
               value={options.gainMapResolutionMode}
               onChange={(gainMapResolutionMode) =>
                 updateOptions({ gainMapResolutionMode: gainMapResolutionMode as GainMapResolutionMode })
@@ -570,7 +615,9 @@ function App() {
             </section>
           )}
           <Slider
+            language={language}
             label={t.heicQuality}
+            help={help.heicQuality}
             value={quality}
             min={45}
             max={100}
@@ -630,7 +677,9 @@ function App() {
 }
 
 function Slider({
+  language,
   label,
+  help,
   value,
   min,
   max,
@@ -638,7 +687,9 @@ function Slider({
   format,
   onChange,
 }: {
+  language: Language
   label: string
+  help: ParameterHelpCopy
   value: number
   min: number
   max: number
@@ -646,46 +697,53 @@ function Slider({
   format: (value: number) => string
   onChange: (value: number) => void
 }) {
+  const id = React.useId()
   return (
-    <label className="slider-row">
-      <span>
-        {label}
-        <strong>{format(value)}</strong>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </label>
+    <ParameterField language={language} id={id} label={label} value={format(value)} help={help} className="slider-row">
+      {(describedById) => (
+        <input
+          id={id}
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          aria-describedby={describedById}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+      )}
+    </ParameterField>
   )
 }
 
 function SelectRow({
+  language,
   label,
+  help,
   value,
   options,
   onChange,
 }: {
+  language: Language
   label: string
+  help: ParameterHelpCopy
   value: string
   options: { value: string; label: string; disabled?: boolean }[]
   onChange: (value: string) => void
 }) {
+  const id = React.useId()
   return (
-    <label className="select-row">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value} disabled={option.disabled}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <ParameterField language={language} id={id} label={label} help={help} className="select-row">
+      {(describedById) => (
+        <select id={id} value={value} aria-describedby={describedById} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value} disabled={option.disabled}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </ParameterField>
   )
 }
 
