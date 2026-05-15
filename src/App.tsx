@@ -59,6 +59,8 @@ let nextRequestId = 1
 const showDebugControls = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug')
 
 function App() {
+  useSystemColorScheme()
+
   const [language, setLanguage] = React.useState<Language>(() => getInitialLanguage())
   const [inputMode, setInputMode] = React.useState<InputMode>('single-image-enhance')
   const [currentPreset, setCurrentPreset] = React.useState<PresetSelection>(defaultPresetId)
@@ -600,8 +602,14 @@ function App() {
             </a>
           )}
 
-          <p className="status-line">{status.fallback ?? t[status.key]}</p>
-          {error && <p className="error-line">{error}</p>}
+          <p className="status-line" role="status" aria-live="polite">
+            {status.fallback ?? t[status.key]}
+          </p>
+          {error && (
+            <p className="error-line" role="alert">
+              {error}
+            </p>
+          )}
         </aside>
 
         <section className="preview-panel">
@@ -801,6 +809,10 @@ async function checkEncoderAsset(fileName: string) {
 
 function revokePreview(preview: PreviewState | null) {
   if (!preview) return
+  URL.revokeObjectURL(preview.baseUrl)
+  URL.revokeObjectURL(preview.maskUrl)
+  URL.revokeObjectURL(preview.gainUrl)
+  URL.revokeObjectURL(preview.hdrUrl)
 }
 
 function toArrayBuffer(bytes: Uint8Array) {
@@ -817,3 +829,25 @@ function withSuffix(name: string, suffix: string) {
 }
 
 export default App
+
+function useSystemColorScheme() {
+  React.useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyColorScheme = () => {
+      document.documentElement.dataset.colorScheme = media.matches ? 'dark' : 'light'
+    }
+
+    applyColorScheme()
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', applyColorScheme)
+      return () => media.removeEventListener('change', applyColorScheme)
+    }
+
+    const legacyMedia = media as MediaQueryList & {
+      addListener?: (listener: () => void) => void
+      removeListener?: (listener: () => void) => void
+    }
+    legacyMedia.addListener?.(applyColorScheme)
+    return () => legacyMedia.removeListener?.(applyColorScheme)
+  }, [])
+}
