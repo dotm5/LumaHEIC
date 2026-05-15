@@ -1,0 +1,15 @@
+[package]
+name = "bypass-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Platform-neutral single-image Apple HDR gain map generator"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
