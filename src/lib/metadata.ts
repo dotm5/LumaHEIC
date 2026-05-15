@@ -19,7 +19,7 @@ export function buildAppleGainMapXmp(options: BypassOptions) {
 
 export function buildDebugManifest(options: BypassOptions, inputName: string) {
   return {
-    kind: 'apple-hdr-gain-map-debug-package',
+    kind: 'hdr-gain-map-debug-package',
     version: 1,
     inputName,
     auxiliaryType: APPLE_HDR_GAIN_MAP_URN,

@@ -86,7 +86,7 @@ function encodeWithNativeModule(module: NativeModule, request: HeicEncodeRequest
       fileName: withExtension(request.sourceName, '.heic'),
       mimeType: 'image/heic',
       bytes,
-      message: 'Encoded Apple HDR gain map HEIC locally in your browser.',
+      message: 'Encoded HDR gain-map HEIC locally in your browser.',
     }
   } finally {
     module._free(basePtr)
@@ -115,9 +115,9 @@ function nativeEncoderStatusMessage(status: number) {
     9: 'could not allocate the gain map luma plane',
     10: 'could not fill the gain map image',
     11: 'could not encode the gain map image',
-    12: 'could not add the Apple HDR auxC property',
+    12: 'could not add the HDR gain-map auxC property',
     13: 'could not add the auxl item reference between gain map and primary image',
-    14: 'could not add Apple HDR gain map XMP metadata',
+    14: 'could not add HDR gain-map XMP metadata',
     15: 'could not write the HEIC container',
     16: 'could not allocate the encoded output buffer',
     17: 'could not set x265 preset',
@@ -133,7 +133,7 @@ function nativeEncoderStatusMessage(status: number) {
     27: 'could not disable x265 lookahead',
     28: 'could not disable x265 B-frames',
     29: 'could not disable x265 B-frame adaptation',
-    30: 'could not add Apple MakerNote EXIF metadata',
+    30: 'could not add MakerNote EXIF metadata',
   }
   return messages[status] ?? `native encoder returned status ${status}`
 }

@@ -7,7 +7,7 @@ export const languageLabels: Record<Language, string> = {
 
 export const translations = {
   en: {
-    appEyebrow: 'Browser-only Apple HDR gain-map HEIC',
+    appEyebrow: 'Browser-only HDR gain-map HEIC',
     appTitle: 'LumaHEIC',
     conceptReferencePrefix: 'Conceptual reference:',
     inputMode: 'Input mode',
@@ -61,7 +61,7 @@ export const translations = {
     gainMapOutputSize: 'Gain map output',
     downloadGainMapPng: 'Download gain map PNG',
     heicQuality: 'HEIC quality',
-    exportHeic: 'Export Apple HDR HEIC',
+    exportHeic: 'Export HDR HEIC',
     downloadHeic: 'Download HEIC',
     downloadDebugPackage: 'Download debug package',
     sdrBase: 'SDR base',
@@ -72,7 +72,7 @@ export const translations = {
     headroom: 'Headroom',
     stops: 'stops',
     statusDrop: 'Drop or choose a JPEG/PNG to begin',
-    statusGeneratingGainMap: 'Generating Apple-style gain map',
+    statusGeneratingGainMap: 'Generating HDR gain map',
     statusEncodingHeic: 'Encoding HEIC payload',
     statusProcessingFailed: 'Processing failed',
     statusPreviewUpdated: 'Preview updated',
@@ -83,10 +83,10 @@ export const translations = {
     statusCouldNotLoadImage: 'Could not load image',
     statusExportUnavailable: 'Export unavailable',
     errorBrowserEncoderUnavailable: 'Browser HEIC encoder is not available',
-    encodedHeicLocal: 'Encoded Apple HDR gain map HEIC locally in your browser.',
+    encodedHeicLocal: 'Encoded HDR gain-map HEIC locally in your browser.',
   },
   zh: {
-    appEyebrow: '浏览器本地 Apple HDR 增益图 HEIC',
+    appEyebrow: '浏览器本地 HDR gain map HEIC',
     appTitle: 'LumaHEIC',
     conceptReferencePrefix: '思路参考：',
     inputMode: '输入模式',
@@ -140,7 +140,7 @@ export const translations = {
     gainMapOutputSize: '增益图输出',
     downloadGainMapPng: '下载增益图 PNG',
     heicQuality: 'HEIC 质量',
-    exportHeic: '导出 Apple HDR HEIC',
+    exportHeic: '导出 HDR HEIC',
     downloadHeic: '下载 HEIC',
     downloadDebugPackage: '下载调试包',
     sdrBase: 'SDR 基图',
@@ -151,7 +151,7 @@ export const translations = {
     headroom: '余量',
     stops: '档',
     statusDrop: '拖入或选择 JPEG/PNG 开始',
-    statusGeneratingGainMap: '正在生成 Apple 风格增益图',
+    statusGeneratingGainMap: '正在生成 HDR gain map',
     statusEncodingHeic: '正在编码 HEIC',
     statusProcessingFailed: '处理失败',
     statusPreviewUpdated: '预览已更新',
@@ -162,7 +162,7 @@ export const translations = {
     statusCouldNotLoadImage: '无法加载图片',
     statusExportUnavailable: '无法导出',
     errorBrowserEncoderUnavailable: '浏览器 HEIC 编码器不可用',
-    encodedHeicLocal: '已在浏览器本地编码 Apple HDR 增益图 HEIC。',
+    encodedHeicLocal: '已在浏览器本地编码 HDR gain-map HEIC。',
   },
 } satisfies Record<Language, Record<string, string>>
 
