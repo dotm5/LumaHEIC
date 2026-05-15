@@ -4,7 +4,7 @@
   <img src="public/favicon.svg" alt="LumaHEIC 图标" width="96" height="96">
 </p>
 
-[![Deploy GitHub Pages](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml/badge.svg)](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml)
+[![Deploy GitHub Pages](https://github.com/dotm5/LumaHEIC/actions/workflows/pages.yml/badge.svg)](https://github.com/dotm5/LumaHEIC/actions/workflows/pages.yml)
 [![License: GPL v2 or later](https://img.shields.io/badge/License-GPL_v2_or_later-blue.svg)](LICENSE)
 
 **语言：** [English](README.md) | 简体中文
@@ -30,10 +30,10 @@ LumaHEIC 是一个纯浏览器端的 Apple HDR 增益图 HEIC 导出工具，可
 当前 GitHub Pages 部署地址：
 
 ```text
-https://dotm5.github.io/hdr-heic-bypass/
+https://dotm5.github.io/LumaHEIC/
 ```
 
-仓库路径目前仍然是 `hdr-heic-bypass`；如果之后重命名 GitHub 仓库，需要同步更新 `VITE_BASE_PATH` 和 Pages workflow 中的路径。
+仓库路径是 `LumaHEIC`；需要让 `VITE_BASE_PATH` 和 Pages workflow 与这个 slug 保持一致，这样静态 WASM 编码器资源才能正确加载。
 
 ### 本地开发
 
@@ -61,7 +61,7 @@ npm run build
 当前仓库 slug 对应的构建方式：
 
 ```bash
-VITE_BASE_PATH=/hdr-heic-bypass/ npm run build
+VITE_BASE_PATH=/LumaHEIC/ npm run build
 ```
 
 GitHub Pages 仍然是静态部署。项目没有 `/api/encode-heic` 路由，也没有服务器端编码路径。

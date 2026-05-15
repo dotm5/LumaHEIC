@@ -37,7 +37,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_BASE_PATH: /hdr-heic-bypass/
+          VITE_BASE_PATH: /LumaHEIC/
 
       - name: Verify browser encoder assets
         run: |

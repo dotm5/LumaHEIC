@@ -4,7 +4,7 @@
   <img src="public/favicon.svg" alt="LumaHEIC icon" width="96" height="96">
 </p>
 
-[![Deploy GitHub Pages](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml/badge.svg)](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml)
+[![Deploy GitHub Pages](https://github.com/dotm5/LumaHEIC/actions/workflows/pages.yml/badge.svg)](https://github.com/dotm5/LumaHEIC/actions/workflows/pages.yml)
 [![License: GPL v2 or later](https://img.shields.io/badge/License-GPL_v2_or_later-blue.svg)](LICENSE)
 
 **Language:** English | [简体中文](README_CN.md)
@@ -30,10 +30,10 @@ The generated HDR look is synthetic. LumaHEIC does not recover true scene HDR in
 The current GitHub Pages deployment is:
 
 ```text
-https://dotm5.github.io/hdr-heic-bypass/
+https://dotm5.github.io/LumaHEIC/
 ```
 
-The repository path is still `hdr-heic-bypass`; if the GitHub repository is renamed later, update `VITE_BASE_PATH` and the Pages workflow to match the new slug.
+The repository path is `LumaHEIC`; keep `VITE_BASE_PATH` and the Pages workflow aligned with that slug so the static WASM encoder assets load correctly.
 
 ### Local development
 
@@ -61,7 +61,7 @@ The encoder output is written to `public/encoders/` and loaded relative to `impo
 For the current repository slug:
 
 ```bash
-VITE_BASE_PATH=/hdr-heic-bypass/ npm run build
+VITE_BASE_PATH=/LumaHEIC/ npm run build
 ```
 
 GitHub Pages remains a static deployment. There is no `/api/encode-heic` route and no server-side encoding path.
