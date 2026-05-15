@@ -91,6 +91,17 @@
   display: none;
 }
 
+.encoder-status {
+  margin: -4px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.encoder-status.ready {
+  color: var(--muted);
+}
+
 .panel-heading {
   display: flex;
   align-items: center;
@@ -127,6 +138,18 @@
 
 .slider-row input {
   width: 100%;
+  accent-color: var(--accent);
+}
+
+.debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.debug-toggle input {
   accent-color: var(--accent);
 }
 

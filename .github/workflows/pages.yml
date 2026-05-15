@@ -39,6 +39,11 @@ jobs:
         env:
           VITE_BASE_PATH: /hdr-heic-bypass/
 
+      - name: Verify browser encoder assets
+        run: |
+          test -f dist/encoders/apple-hdr-heic.js
+          test -f dist/encoders/apple-hdr-heic.wasm
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -198,7 +198,7 @@ async function serveStatic(pathname, response) {
   }
 
   createReadStream(filePath)
-    .on('error', () => sendText(response, 404, 'Run npm run build:wasm before serve:wasm'))
+    .on('error', () => sendText(response, 404, 'This experimental backend is not part of the browser-only build.'))
     .once('open', () => {
       response.writeHead(200, {
         'content-type': contentType(filePath),

@@ -1,8 +1,8 @@
-# libheif + x265 WASM backend
+# libheif + x265 browser WASM encoder
 
-This folder contains the native bridge for the production HEIC encoder.
+This folder contains the native bridge for the production browser-only HEIC encoder.
 
-The web app can run without this backend: it exports a `.gainmap.json` debug package that includes the SDR base RGBA pixels, the Apple-style quarter-resolution gain map, XMP metadata, and encoder options. Once the backend is built, the same UI automatically loads `public/encoders/apple-hdr-heic.js` and exports `.heic`.
+The web app does not call a server-side encoder. Once this WASM module is built, the UI loads `public/encoders/apple-hdr-heic.js` and `public/encoders/apple-hdr-heic.wasm` inside the browser worker and exports `.heic`. If those files are missing, export is unavailable.
 
 ## Build
 
@@ -23,8 +23,8 @@ The script clones and builds:
 
 ## Compatibility note
 
-The bridge encodes a primary HEIC image, a monochrome auxiliary gain map image, an `auxC` property using `urn:com:apple:photo:2020:aux:hdrgainmap`, an `auxl` item reference, and XMP HDR gain map metadata. This follows the structure required by Apple-style HDR gain maps, but macOS Photos/Preview validation still needs to be performed with real output samples.
+The bridge encodes a primary HEIC image, a monochrome auxiliary gain map image, an `auxC` property using `urn:com:apple:photo:2020:aux:hdrgainmap`, an `auxl` item reference from the gain-map item to the primary item, Apple HDR gain map XMP metadata, and best-effort Apple MakerNote `HDRHeadroom` / `HDRGain` EXIF metadata. This follows the structure seen in Apple-style HDR gain maps, but macOS Photos / iOS Photos validation still needs to be performed with real output samples.
 
 ## License note
 
-`libheif` is LGPL. `x265` is GPL and HEVC may carry patent/licensing obligations depending on how and where the app is distributed. Keep the encoder build optional if this project is published publicly.
+`libheif` is LGPL. `x265` is GPL and HEVC may carry patent/licensing obligations depending on how and where the app is distributed. Review distribution requirements before publishing the browser WASM encoder.

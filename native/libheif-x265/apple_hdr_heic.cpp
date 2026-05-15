@@ -76,6 +76,100 @@ std::string build_xmp(float headroom) {
   return xmp;
 }
 
+void append_u16_be(std::vector<uint8_t>& bytes, uint16_t value) {
+  bytes.push_back(static_cast<uint8_t>((value >> 8) & 0xff));
+  bytes.push_back(static_cast<uint8_t>(value & 0xff));
+}
+
+void append_u32_be(std::vector<uint8_t>& bytes, uint32_t value) {
+  bytes.push_back(static_cast<uint8_t>((value >> 24) & 0xff));
+  bytes.push_back(static_cast<uint8_t>((value >> 16) & 0xff));
+  bytes.push_back(static_cast<uint8_t>((value >> 8) & 0xff));
+  bytes.push_back(static_cast<uint8_t>(value & 0xff));
+}
+
+void append_s32_be(std::vector<uint8_t>& bytes, int32_t value) {
+  append_u32_be(bytes, static_cast<uint32_t>(value));
+}
+
+void append_ifd_entry_be(std::vector<uint8_t>& bytes, uint16_t tag, uint16_t type, uint32_t count, uint32_t value_or_offset) {
+  append_u16_be(bytes, tag);
+  append_u16_be(bytes, type);
+  append_u32_be(bytes, count);
+  append_u32_be(bytes, value_or_offset);
+}
+
+int32_t rational_numerator(float value, int32_t denominator) {
+  const double scaled = static_cast<double>(value) * static_cast<double>(denominator);
+  if (scaled > 2147483647.0) return 2147483647;
+  if (scaled < -2147483648.0) return -2147483647 - 1;
+  return static_cast<int32_t>(std::llround(scaled));
+}
+
+void append_signed_rational_be(std::vector<uint8_t>& bytes, float value) {
+  constexpr int32_t kDenominator = 1000000;
+  append_s32_be(bytes, rational_numerator(value, kDenominator));
+  append_s32_be(bytes, kDenominator);
+}
+
+std::vector<uint8_t> build_apple_makernote(float headroom) {
+  const float clamped_headroom = std::max(headroom, 1.05f);
+  const float hdr_gain = std::log2(clamped_headroom);
+  std::vector<uint8_t> maker;
+  const uint8_t signature[] = {'A', 'p', 'p', 'l', 'e', ' ', 'i', 'O', 'S', 0, 0, 1, 'M', 'M'};
+  maker.insert(maker.end(), signature, signature + sizeof(signature));
+  append_u16_be(maker, 2);
+  append_ifd_entry_be(maker, 0x0021, 10, 1, 44);
+  append_ifd_entry_be(maker, 0x0030, 10, 1, 52);
+  append_u32_be(maker, 0);
+  append_signed_rational_be(maker, clamped_headroom);
+  append_signed_rational_be(maker, hdr_gain);
+  return maker;
+}
+
+std::vector<uint8_t> build_exif(float headroom) {
+  constexpr uint32_t kTiffHeaderOffset = 0;
+  constexpr uint32_t kIfd0Offset = 8;
+  constexpr uint32_t kIfd0EntryCount = 3;
+  constexpr uint32_t kIfd0DataOffset = kIfd0Offset + 2 + kIfd0EntryCount * 12 + 4;
+  constexpr const char* kMake = "Apple";
+  constexpr const char* kSoftware = "HDR HEIC Bypass";
+  constexpr uint32_t kMakeLength = 6;
+  constexpr uint32_t kSoftwareLength = 16;
+  constexpr uint32_t kMakeOffset = kIfd0DataOffset;
+  constexpr uint32_t kSoftwareOffset = kMakeOffset + kMakeLength;
+  constexpr uint32_t kExifIfdOffset = kSoftwareOffset + kSoftwareLength;
+  constexpr uint32_t kExifIfdEntryCount = 3;
+  constexpr uint32_t kExifIfdDataOffset = kExifIfdOffset + 2 + kExifIfdEntryCount * 12 + 4;
+
+  const std::vector<uint8_t> maker_note = build_apple_makernote(headroom);
+  std::vector<uint8_t> exif;
+
+  exif.push_back('M');
+  exif.push_back('M');
+  append_u16_be(exif, 42);
+  append_u32_be(exif, kIfd0Offset);
+
+  append_u16_be(exif, kIfd0EntryCount);
+  append_ifd_entry_be(exif, 0x010f, 2, kMakeLength, kMakeOffset);
+  append_ifd_entry_be(exif, 0x0131, 2, kSoftwareLength, kSoftwareOffset);
+  append_ifd_entry_be(exif, 0x8769, 4, 1, kExifIfdOffset);
+  append_u32_be(exif, 0);
+
+  exif.insert(exif.end(), kMake, kMake + kMakeLength);
+  exif.insert(exif.end(), kSoftware, kSoftware + kSoftwareLength);
+
+  append_u16_be(exif, kExifIfdEntryCount);
+  append_ifd_entry_be(exif, 0x9000, 7, 4, 0x30323331);
+  append_ifd_entry_be(exif, 0x927c, 7, static_cast<uint32_t>(maker_note.size()), kExifIfdDataOffset);
+  append_ifd_entry_be(exif, 0xa001, 3, 1, 0xffff0000);
+  append_u32_be(exif, 0);
+  exif.insert(exif.end(), maker_note.begin(), maker_note.end());
+
+  (void)kTiffHeaderOffset;
+  return exif;
+}
+
 heif_error fill_rgba_image(heif_image* image, const uint8_t* rgba, int width, int height) {
   int stride = 0;
   uint8_t* plane = heif_image_get_plane(image, heif_channel_interleaved, &stride);
@@ -244,8 +338,15 @@ int encode_apple_hdr_heic(
   err = add_auxc_property(ctx, gain_id);
   if (failed(err)) { cleanup(); return 12; }
   trace_step("add auxiliary reference");
+  // HEIF/libheif and Apple-generated samples model `auxl` from the auxiliary
+  // gain-map item to the primary image item.
   err = heif_context_add_item_reference(ctx, heif_fourcc('a', 'u', 'x', 'l'), gain_id, base_id);
   if (failed(err)) { cleanup(); return 13; }
+
+  trace_step("add Apple MakerNote EXIF metadata");
+  const std::vector<uint8_t> exif = build_exif(headroom);
+  err = heif_context_add_exif_metadata(ctx, base_handle, exif.data(), static_cast<int>(exif.size()));
+  if (failed(err)) { cleanup(); return 30; }
 
   trace_step("add XMP metadata");
   const std::string xmp = build_xmp(headroom);

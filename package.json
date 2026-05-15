@@ -6,11 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build:encoder": "bash scripts/build-libheif-x265-wasm.sh",
-    "build:wasm": "npm run build:encoder && VITE_HEIC_ENCODER_MODE=backend npm run build",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "serve:wasm": "node server/wasm-backend.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

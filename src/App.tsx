@@ -24,23 +24,37 @@ type OutputState = {
   kind: HeicEncodeResult['kind']
 }
 
+type EncoderCheckState = 'checking' | 'ready' | 'missing'
+
 const worker = new Worker(new URL('./workers/bypassWorker.ts', import.meta.url), {
   type: 'module',
 })
 
 let nextRequestId = 1
+const showDebugControls = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug')
+const extremeGainMapOptions: BypassOptions = {
+  headroom: 8,
+  intensity: 1,
+  threshold: 0.2,
+  softness: 0.1,
+  colorProtection: 0,
+}
 
 function App() {
   const [sourceName, setSourceName] = React.useState('')
   const [sourceImage, setSourceImage] = React.useState<RgbaImage | null>(null)
   const [options, setOptions] = React.useState<BypassOptions>(defaultBypassOptions)
+  const [extremeGainMap, setExtremeGainMap] = React.useState(false)
   const [quality, setQuality] = React.useState(82)
   const [preview, setPreview] = React.useState<PreviewState | null>(null)
   const [result, setResult] = React.useState<GainMapResult | null>(null)
   const [output, setOutput] = React.useState<OutputState | null>(null)
   const [status, setStatus] = React.useState('Drop or choose a JPEG/PNG to begin')
+  const [encoderCheck, setEncoderCheck] = React.useState<EncoderCheckState>('checking')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+
+  const encoderReady = encoderCheck === 'ready'
 
   React.useEffect(() => {
     return () => revokePreview(preview)
@@ -51,6 +65,20 @@ function App() {
       if (output) URL.revokeObjectURL(output.url)
     }
   }, [output])
+
+  React.useEffect(() => {
+    let cancelled = false
+    Promise.all([checkEncoderAsset('apple-hdr-heic.js'), checkEncoderAsset('apple-hdr-heic.wasm')])
+      .then(() => {
+        if (!cancelled) setEncoderCheck('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setEncoderCheck('missing')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     worker.onmessage = (event: MessageEvent) => {
@@ -99,6 +127,11 @@ function App() {
     }
   }, [])
 
+  const setExtremeDebugMode = (enabled: boolean) => {
+    setExtremeGainMap(enabled)
+    setOptions(enabled ? extremeGainMapOptions : defaultBypassOptions)
+  }
+
   const handleFile = async (file: File | null) => {
     if (!file) return
     setBusy(true)
@@ -127,6 +160,11 @@ function App() {
 
   const processImage = React.useCallback((encode: boolean) => {
     if (!sourceImage) return
+    if (encode && !encoderReady) {
+      setError('Browser HEIC encoder is not available')
+      setStatus('Export unavailable')
+      return
+    }
     setBusy(true)
     setError(null)
     if (encode) {
@@ -153,7 +191,7 @@ function App() {
       },
       [requestImage.data.buffer as ArrayBuffer],
     )
-  }, [options, quality, sourceImage, sourceName])
+  }, [encoderReady, options, quality, sourceImage, sourceName])
 
   React.useEffect(() => {
     if (!sourceImage) return
@@ -191,6 +229,12 @@ function App() {
               onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
             />
           </label>
+
+          <p className={encoderReady ? 'encoder-status ready' : 'encoder-status'}>
+            {encoderCheck === 'checking' && 'Checking local HEIC encoder files...'}
+            {encoderCheck === 'ready' && 'HEIC encoder ready. All processing runs locally in your browser.'}
+            {encoderCheck === 'missing' && 'HEIC encoder files are missing. Export is unavailable.'}
+          </p>
 
           <div className="panel-heading">
             <SlidersHorizontal aria-hidden="true" />
@@ -242,6 +286,16 @@ function App() {
             format={(v) => `${Math.round(v * 100)}%`}
             onChange={(colorProtection) => setOptions((state) => ({ ...state, colorProtection }))}
           />
+          {showDebugControls && (
+            <label className="debug-toggle">
+              <input
+                type="checkbox"
+                checked={extremeGainMap}
+                onChange={(event) => setExtremeDebugMode(event.target.checked)}
+              />
+              <span>Extreme gain map debug</span>
+            </label>
+          )}
           <Slider
             label="HEIC quality"
             value={quality}
@@ -252,7 +306,7 @@ function App() {
             onChange={(nextQuality) => setQuality(nextQuality)}
           />
 
-          <button className="primary-action" disabled={!sourceImage || busy} onClick={() => processImage(true)}>
+          <button className="primary-action" disabled={!sourceImage || busy || !encoderReady} onClick={() => processImage(true)}>
             {busy ? <Loader2 className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
             Export Apple HDR HEIC
           </button>
@@ -349,6 +403,17 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+async function checkEncoderAsset(fileName: string) {
+  const url = `${import.meta.env.BASE_URL}encoders/${fileName}`
+  const head = await fetch(url, { method: 'HEAD', cache: 'no-store' })
+  if (head.ok) return
+
+  const get = await fetch(url, { method: 'GET', cache: 'no-store' })
+  if (!get.ok) {
+    throw new Error(`${fileName} is missing`)
+  }
 }
 
 function revokePreview(preview: PreviewState | null) {
