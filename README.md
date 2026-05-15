@@ -11,7 +11,7 @@
 
 LumaHEIC is an open-source, browser-only HDR gain-map HEIC authoring and debugging tool. It converts ordinary SDR images, or custom SDR base + gain-map pairs, into HDR HEIC files designed for compatible photo viewers and HDR/EDR displays.
 
-Instead of hiding the result behind a single strength slider, LumaHEIC exposes practical controls for HDR image authoring: headroom, strength, protection, gain-map resolution, gain-map preview, reference preview, and HEIC metadata validation.
+LumaHEIC now uses a percentile-based highlight mask and a traditional gain-map pipeline instead of a single exposure slider. The controls cover HDR strength, highlight start, highlight rolloff, shadow lift, color protect, detail, headroom, midtone lock, clip guard, gain-map gamma, and edge-aware smoothing.
 
 Everything runs locally in the browser. Images are never uploaded to any server: decoding, gain-map generation, preview rendering, and HEIC encoding run inside a Web Worker and a WASM encoder.
 
@@ -47,9 +47,9 @@ Start with one JPEG or PNG. LumaHEIC builds a synthetic HDR gain map in the brow
 
 Use an SDR base image plus a grayscale gain map that you created elsewhere. This mode is intended for controlled authoring, format experiments, and debugging base + gain-map pipelines.
 
-### 3. Tune HDR parameters instead of using only one strength slider
+### 3. Tune HDR parameters with a percentile-based pipeline
 
-Presets are available, but the workflow remains editable. You can adjust headroom, HDR strength, exposure, highlights, whites, shadow protection, saturation protection, skin protection, glow, edge smoothing, small-highlight preservation, and gain-map resolution.
+Presets are available, but the workflow remains editable. You can adjust HDR strength, highlight start, highlight rolloff, shadow lift, color protect, detail, headroom, midtone lock, white and black guards, clip guard, gain-map gamma, edge-aware smoothing, and gain-map resolution.
 
 ### 4. Local processing, no server upload
 
@@ -97,11 +97,13 @@ This mode currently covers Base + Gain Map authoring only. Base + HDR Target aut
 
 ## Presets
 
-The default preset is **Natural**. It is conservative for general photography: moderate headroom, moderate HDR strength, strong protection, and automatic gain-map resolution.
+The default preset is **Natural**. It is conservative for general photography: moderate headroom, modest strength, strong color protection, and automatic gain-map resolution.
 
 - **Natural**: balanced, low-risk synthetic HDR for general photography.
 - **Bright**: stronger highlights and headroom, still suitable for normal images.
-- **Extreme**: exaggerated output intended for stress testing or stylized results.
+- **Neon / Night**: tuned for night scenes, signs, neon, and game screenshots.
+- **Soft**: smoother highlight transitions with softer rolloff.
+- **Product**: conservative color handling for product shots, white backgrounds, metal, and glass.
 
 Presets are starting points, not locked modes. After choosing a preset, every parameter remains editable. A manual edit moves the UI into a custom preset state.
 
@@ -117,6 +119,8 @@ The gain-map auxiliary image can be generated at different resolutions:
 - **Custom**: reserved in the data model and currently shown as a disabled TODO in the UI.
 
 All active modes preserve aspect ratio, keep dimensions at least 1 px, and do not exceed the base image dimensions. Sparse highlights use a mixed average/max downsample path so small bright points are not fully averaged away.
+
+The synthetic pipeline still cannot recover real scene HDR information that was not present in the source image.
 
 ## Local Development
 

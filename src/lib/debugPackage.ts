@@ -18,7 +18,7 @@ export function createDebugPackage({ sourceName, result, options }: DebugPackage
     gainMap: {
       width: result.gainMap.width,
       height: result.gainMap.height,
-      rec709Luma: Array.from(result.gainMap.data),
+      encodedLuma: Array.from(result.gainMap.data),
     },
     stats: result.stats,
   }

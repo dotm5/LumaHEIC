@@ -11,22 +11,20 @@ export type ParameterHelpCopy = {
 export type ParameterHelpKey =
   | 'inputMode'
   | 'preset'
-  | 'exposure'
-  | 'highlights'
-  | 'whites'
-  | 'shadows'
-  | 'blacks'
   | 'hdrStrength'
-  | 'peakHeadroom'
-  | 'glow'
-  | 'protection'
   | 'highlightStart'
-  | 'highlightEnd'
-  | 'shadowProtect'
-  | 'saturationProtect'
-  | 'skinProtect'
-  | 'edgeSmoothRadius'
-  | 'smallHighlightPreserve'
+  | 'highlightRolloff'
+  | 'shadowLift'
+  | 'colorProtect'
+  | 'detail'
+  | 'headroom'
+  | 'midtoneLock'
+  | 'edgeAwareRadius'
+  | 'edgeAwareEps'
+  | 'clipGuard'
+  | 'gainMapGamma'
+  | 'whitePointGuard'
+  | 'blackPointGuard'
   | 'gainMapResolution'
   | 'heicQuality'
 
@@ -34,253 +32,225 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
   en: {
     inputMode: {
       title: 'Input mode',
-      summary: 'Choose between generating a gain map from one image or using a separate base image and grayscale gain map.',
-      effect: 'Single Image Enhance creates a synthetic gain map in the browser. Base + Gain Map uses your supplied pair directly.',
-      recommended: 'Use Single Image Enhance for normal photos. Use Base + Gain Map when you already have a prepared gain map.',
-      warning: 'Base + Gain Map needs both files.',
+      summary: 'Choose between synthetic gain-map generation and using a supplied SDR base plus gain map.',
+      effect: 'Single Image Enhance runs the percentile-based pipeline locally. Base + Gain Map bypasses synthetic generation and packages your pair.',
+      recommended: 'Use Single Image Enhance for ordinary SDR photos. Use Base + Gain Map when you already have a prepared grayscale gain map.',
+      warning: 'Synthetic gain maps cannot recover real scene HDR that is not present in the source image.',
     },
     preset: {
       title: 'Preset',
-      summary: 'Starts from a tuned parameter set for common HDR looks.',
-      effect: 'Presets set headroom, strength, protection, glow, and resolution together, then you can still edit every control.',
-      recommended: 'Natural is the safest starting point for most images.',
-    },
-    exposure: {
-      title: 'Exposure',
-      summary: 'Shifts the overall brightness before gain-map generation.',
-      effect: 'Higher exposure can make more of the image enter the HDR range. Lower exposure keeps the result darker and more restrained.',
-      recommended: 'Stay near 0 unless the source is clearly too dark or too bright.',
-    },
-    highlights: {
-      title: 'Highlights',
-      summary: 'Adjusts the brightest mid-to-high tones.',
-      effect: 'Higher values push more highlight detail into the gain map, which can make bright areas pop more.',
-      recommended: 'Small positive values are usually enough.',
-    },
-    whites: {
-      title: 'Whites',
-      summary: 'Adjusts the very bright tones near pure white.',
-      effect: 'Higher values expand the bright end of the image, but too much can flatten highlight texture.',
-      recommended: 'Use small changes around neutral.',
-    },
-    shadows: {
-      title: 'Shadows',
-      summary: 'Adjusts darker tones above black.',
-      effect: 'Higher values can lift dark detail, but too much can reduce contrast and make the image look flat.',
-      recommended: 'Use sparingly for underexposed images.',
-    },
-    blacks: {
-      title: 'Blacks',
-      summary: 'Adjusts the deepest dark tones.',
-      effect: 'Higher values lift the darkest areas and reveal shadow detail, but can wash out blacks.',
-      recommended: 'Keep near neutral unless the image is too crushed.',
+      summary: 'Starts from a tuned group of HDR gain-map controls.',
+      effect: 'Changing a preset updates strength, highlight rolloff, color protection, smoothing, headroom, and clip guard together.',
+      recommended: 'Natural is the safest starting point for most images. Manual edits move the UI into Custom.',
     },
     hdrStrength: {
       title: 'HDR strength',
-      summary: 'Controls how strongly bright regions are boosted by the gain map.',
-      effect: 'Higher values create more visible HDR highlights, but can look unnatural when overused.',
-      recommended: 'Around 0.6-0.8 for natural results.',
-    },
-    peakHeadroom: {
-      title: 'Peak headroom',
-      summary: 'Sets how far the HDR output can extend above the SDR base image.',
-      effect: 'Higher values preserve stronger highlights on compatible HDR/EDR displays, but need more careful tuning.',
-      recommended: 'Use about 2-4 for most photos.',
-    },
-    glow: {
-      title: 'Glow',
-      summary: 'Adds a soft spread around bright areas.',
-      effect: 'Higher values can make highlights feel smoother, but too much glow can blur fine contrast.',
-      recommended: 'Keep low unless you want a softer look.',
-    },
-    protection: {
-      title: 'Protection',
-      summary: 'Protects shadows, skin, and colors from being pushed too hard.',
-      effect: 'Higher values keep the HDR effect focused on highlights and reduce color shifts in the rest of the image.',
-      recommended: 'Use higher protection for portraits and mixed scenes.',
+      summary: 'Controls the maximum HDR boost in stops.',
+      effect: 'Higher values make selected highlights expand further above the SDR base on compatible HDR/EDR displays.',
+      recommended: 'Keep moderate unless the source has clear specular highlights.',
     },
     highlightStart: {
       title: 'Highlight start',
-      summary: 'Sets where the highlight roll-off begins.',
-      effect: 'Lower values move more of the image into the HDR treatment; higher values keep the effect confined to brighter tones.',
-      recommended: 'Leave near the preset unless highlights need earlier or later treatment.',
+      summary: 'Selects which bright regions begin receiving HDR gain, based on luminance percentile.',
+      effect: 'Lower values include more bright tones. Higher values keep gain focused on only the brightest areas.',
+      recommended: 'Move down for flat images; move up when mids are being lifted.',
     },
-    highlightEnd: {
-      title: 'Highlight end',
-      summary: 'Sets where highlight boosting reaches its strongest point.',
-      effect: 'A wider gap between start and end makes the transition smoother; a smaller gap makes the effect more abrupt.',
-      recommended: 'Keep it above Highlight start.',
+    highlightRolloff: {
+      title: 'Highlight rolloff',
+      summary: 'Controls how gradually highlights reach the maximum boost.',
+      effect: 'A wider percentile gap creates a softer shoulder. A narrower gap creates a more concentrated highlight lift.',
+      recommended: 'Keep it above Highlight start and near the preset unless transitions look abrupt.',
     },
-    shadowProtect: {
-      title: 'Shadow protect',
-      summary: 'Protects dark areas from being lifted too aggressively.',
-      effect: 'Higher values keep shadows darker and reduce unwanted HDR spill into low-light detail.',
-      recommended: 'Useful when the image starts to look flat.',
+    shadowLift: {
+      title: 'Shadow lift',
+      summary: 'Lightly opens deep shadows in the reference preview while keeping the SDR base stable.',
+      effect: 'The synthetic gain map remains highlight-led; shadow lift is intentionally subtle.',
+      recommended: 'Use small values for underexposed images.',
     },
-    saturationProtect: {
-      title: 'Saturation protect',
-      summary: 'Keeps colors from becoming too intense as HDR strength rises.',
-      effect: 'Higher values preserve more natural color, but can reduce punch in vivid highlights.',
-      recommended: 'Raise it for colorful scenes or strong HDR settings.',
+    colorProtect: {
+      title: 'Color protect',
+      summary: 'Reduces gain in highly saturated regions to avoid hue shifts and color clipping.',
+      effect: 'Higher values protect neon colors, logos, skin, and saturated UI elements from excessive gain.',
+      recommended: 'Raise it for vivid scenes or product images.',
     },
-    skinProtect: {
-      title: 'Skin protect',
-      summary: 'Helps keep skin tones natural during HDR boosting.',
-      effect: 'Higher values reduce face over-brightening and color shifts, but may slightly weaken the effect on portraits.',
-      recommended: 'Useful for people in the frame.',
+    detail: {
+      title: 'Detail',
+      summary: 'Blends between a smoother gain map and a more detailed gain map.',
+      effect: 'Higher values preserve sharper local highlight boundaries. Lower values create cleaner, softer gain maps.',
+      recommended: 'Use lower values for portraits and product shots; raise it for small highlights.',
     },
-    edgeSmoothRadius: {
-      title: 'Edge smooth radius',
-      summary: 'Smooths gain-map edges around bright details.',
-      effect: 'Higher values reduce halos and blocky transitions, but can soften very sharp highlight boundaries.',
-      recommended: 'Increase if you see ringing or edge artifacts.',
+    headroom: {
+      title: 'Headroom',
+      summary: 'Sets the intended maximum HDR expansion above the SDR base.',
+      effect: 'This controls the gain-map metadata headroom and the clip guard ceiling.',
+      recommended: 'Around 2 stops is a conservative default.',
     },
-    smallHighlightPreserve: {
-      title: 'Small highlight preserve',
-      summary: 'Keeps tiny bright details from being averaged away.',
-      effect: 'Higher values help preserve sparkle and small specular highlights, but can retain more noise in busy areas.',
-      recommended: 'Raise for reflective scenes and fine highlight detail.',
+    midtoneLock: {
+      title: 'Midtone lock',
+      summary: 'Suppresses gain around mid gray so the whole image is not lifted.',
+      effect: 'Higher values keep midtones closer to the SDR base while still allowing highlight expansion.',
+      recommended: 'Use higher values when faces, walls, or neutral products become too bright.',
+    },
+    edgeAwareRadius: {
+      title: 'Edge-aware smoothness',
+      summary: 'Smooths the gain map while trying to avoid bleeding across strong luminance edges.',
+      effect: 'Higher radius reduces noise and rough transitions. Lower radius keeps local detail tighter.',
+      recommended: 'Use 6-14 px for most images.',
+    },
+    edgeAwareEps: {
+      title: 'Edge threshold',
+      summary: 'Controls how strongly the edge-aware smoother treats luminance changes as edges.',
+      effect: 'Lower values preserve stronger edges. Higher values allow more smoothing across small tonal changes.',
+      recommended: 'Leave near the preset unless halos or noisy masks appear.',
+    },
+    clipGuard: {
+      title: 'Clip guard',
+      summary: 'Softly reduces gain before highlights exceed the target headroom.',
+      effect: 'Higher values are more conservative and reduce over-bright white clipping.',
+      recommended: 'Use high values for product images and white backgrounds.',
+    },
+    gainMapGamma: {
+      title: 'Gain-map gamma',
+      summary: 'Controls the transfer curve used when quantizing log2 gain into the 8-bit gain map.',
+      effect: 'Values below 1 favor lower gains. Values above 1 allocate more code values to subtle highlight gain.',
+      recommended: 'Leave at 1.0 unless debugging quantization.',
+    },
+    whitePointGuard: {
+      title: 'White guard',
+      summary: 'Sets the high luminance percentile used to protect near-white regions.',
+      effect: 'Lower values make the pipeline more conservative near white. Higher values allow stronger small highlights.',
+      recommended: 'Keep high unless white backgrounds clip.',
+    },
+    blackPointGuard: {
+      title: 'Black guard',
+      summary: 'Sets the low luminance percentile used for shadow masking and fallback stability.',
+      effect: 'Higher values broaden shadow protection. Lower values keep it limited to only the darkest pixels.',
+      recommended: 'Leave near the preset for most images.',
     },
     gainMapResolution: {
       title: 'Gain-map resolution',
-      summary: 'Controls how much detail the gain map keeps.',
-      effect: 'Lower values reduce file size; higher values preserve more local detail and cleaner highlight boundaries.',
-      recommended: 'Auto or 720p is a good default for most images.',
+      summary: 'Controls the exported gain-map size and the tradeoff between file size and local detail.',
+      effect: 'Lower values reduce file size. Higher values preserve local highlight boundaries in the auxiliary image.',
+      recommended: 'Auto is a good default for most photos.',
       warning: 'Custom is currently reserved in the data model.',
     },
     heicQuality: {
       title: 'HEIC quality',
-      summary: 'Controls the final HEIC compression quality.',
-      effect: 'Higher values reduce compression artifacts, but make export files larger and can take a bit longer to encode.',
-      recommended: '80-90 is a good general range.',
+      summary: 'Controls final HEIC compression quality.',
+      effect: 'Higher values reduce compression artifacts but increase export size and encoding time.',
+      recommended: '80-90 is a practical range.',
     },
   },
   zh: {
     inputMode: {
       title: '输入模式',
-      summary: '在“单图生成增益图”和“使用单独基图 + 灰度增益图”之间切换。',
-      effect: '单图增强会在浏览器中合成增益图。基图 + 增益图会直接使用你提供的图片对。',
-      recommended: '普通照片建议用单图增强。已有增益图时再用基图 + 增益图。',
-      warning: '基图 + 增益图需要同时提供两张图。',
+      summary: '在合成 gain map 和使用已有 SDR 基图 + gain map 之间切换。',
+      effect: '单图增强会在本地运行百分位高光管线。基图 + 增益图会绕过合成流程，直接封装你提供的图片对。',
+      recommended: '普通 SDR 照片用单图增强。已有灰度 gain map 时用基图 + 增益图。',
+      warning: '合成 gain map 不能恢复源图里不存在的真实场景 HDR 信息。',
     },
     preset: {
       title: '预设',
-      summary: '从一组适合常见 HDR 风格的参数开始。',
-      effect: '预设会一起设定 headroom、强度、保护、glow 和分辨率，但之后仍可继续手动调整。',
-      recommended: 'Natural 是大多数图片最稳妥的起点。',
-    },
-    exposure: {
-      title: '曝光',
-      summary: '在生成增益图前整体平移亮度。',
-      effect: '提高曝光会让更多区域进入 HDR 范围；降低曝光会让结果更暗、更克制。',
-      recommended: '除非源图明显过暗或过亮，否则尽量接近 0。',
-    },
-    highlights: {
-      title: '高光',
-      summary: '调整最亮的中高亮区域。',
-      effect: '数值越高，更多高光细节会进入增益图，明亮区域会更突出。',
-      recommended: '通常只需要小幅正向调整。',
-    },
-    whites: {
-      title: '白色',
-      summary: '调整接近纯白的亮部。',
-      effect: '数值越高，亮部范围越大；过高会让高光纹理变平。',
-      recommended: '在中性附近小幅调整即可。',
-    },
-    shadows: {
-      title: '阴影',
-      summary: '调整黑位以上的暗部。',
-      effect: '数值越高，暗部细节越容易被抬起；过高会压低对比度，让画面变平。',
-      recommended: '过暗的图片可以少量提高。',
-    },
-    blacks: {
-      title: '黑位',
-      summary: '调整最深的暗部。',
-      effect: '数值越高，最暗区域会被抬起并露出更多细节，但也更容易发灰。',
-      recommended: '除非图片压黑太重，否则尽量靠近中性。',
+      summary: '从一组已调好的 HDR gain-map 控制项开始。',
+      effect: '预设会同时更新强度、高光滚降、颜色保护、平滑、headroom 和裁剪保护。',
+      recommended: 'Natural 是大多数图片的稳妥起点。手动调整后会显示为自定义。',
     },
     hdrStrength: {
       title: 'HDR 强度',
-      summary: '控制高亮区域被增益图抬升的力度。',
-      effect: '数值越高，HDR 高光越明显；过度使用时画面会更不自然。',
-      recommended: '自然效果通常在 0.6-0.8 左右。',
-    },
-    peakHeadroom: {
-      title: '峰值余量',
-      summary: '设置 HDR 输出相对 SDR 基图能延伸多远。',
-      effect: '数值越高，在兼容 HDR/EDR 显示上越能保留强高光，但也需要更仔细地调节。',
-      recommended: '大多数照片建议用 2-4 左右。',
-    },
-    glow: {
-      title: '辉光',
-      summary: '在亮部周围加一点柔和扩散。',
-      effect: '数值越高，亮部会更柔顺；过高会冲淡细节对比。',
-      recommended: '想要更柔和的效果时再提高。',
-    },
-    protection: {
-      title: '保护',
-      summary: '保护阴影、肤色和颜色，不让它们被推得太猛。',
-      effect: '数值越高，HDR 效果会更集中在高光上，其余区域的颜色变化也更少。',
-      recommended: '人像或混合场景建议使用较高保护。',
+      summary: '控制最大 HDR 提升档数。',
+      effect: '数值越高，被选中的高光在兼容 HDR/EDR 显示上会比 SDR 基图扩展得更明显。',
+      recommended: '除非源图有明确高光反射，否则保持中等强度。',
     },
     highlightStart: {
       title: '高光起点',
-      summary: '设置高光滚降开始的位置。',
-      effect: '数值越低，更多区域会进入 HDR 处理；数值越高，效果越集中在更亮的部分。',
-      recommended: '通常保持在预设附近即可。',
+      summary: '按亮度百分位选择哪些亮部开始获得 HDR gain。',
+      effect: '数值越低，更多亮部会进入处理；数值越高，gain 越集中在最亮区域。',
+      recommended: '画面偏平时降低；中间调被抬亮时提高。',
     },
-    highlightEnd: {
-      title: '高光终点',
-      summary: '设置高光增强达到最强的位置。',
-      effect: '起点和终点之间的间距越大，过渡越柔和；间距越小，效果越突然。',
-      recommended: '保持它高于高光起点。',
+    highlightRolloff: {
+      title: '高光滚降',
+      summary: '控制高光逐步达到最大提升的速度。',
+      effect: '百分位间隔越宽，高光肩部越柔和；间隔越窄，高光提升越集中。',
+      recommended: '保持高于高光起点，除非过渡显得突兀。',
     },
-    shadowProtect: {
-      title: '阴影保护',
-      summary: '防止暗部被抬得过头。',
-      effect: '数值越高，阴影越容易保持在较暗状态，也能减少 HDR 溢出到低照度细节里。',
-      recommended: '画面开始发平时很有用。',
+    shadowLift: {
+      title: '阴影抬升',
+      summary: '在参考预览里轻微打开深阴影，同时保持 SDR 基图稳定。',
+      effect: '合成 gain map 仍以高光为主；阴影抬升会保持克制。',
+      recommended: '曝光不足的图片可以少量提高。',
     },
-    saturationProtect: {
-      title: '饱和度保护',
-      summary: '防止 HDR 强度升高时颜色过饱和。',
-      effect: '数值越高，颜色越自然；但 vivid 高光的冲劲会稍弱。',
-      recommended: '彩色场景或强 HDR 设置时可以提高。',
+    colorProtect: {
+      title: '颜色保护',
+      summary: '降低高饱和区域的 gain，避免色相漂移和颜色裁剪。',
+      effect: '高数值会保护霓虹、logo、肤色和高饱和 UI 元素。',
+      recommended: '鲜艳场景或产品图建议提高。',
     },
-    skinProtect: {
-      title: '肤色保护',
-      summary: '帮助肤色在 HDR 增强中保持自然。',
-      effect: '数值越高，脸部不容易被抬得过亮，颜色偏移也更少；但人像上的 HDR 感会稍弱。',
-      recommended: '画面里有人物时很实用。',
+    detail: {
+      title: '细节',
+      summary: '在更平滑和更细节化的 gain map 之间混合。',
+      effect: '数值越高，高光边界越清晰；数值越低，gain map 越干净柔和。',
+      recommended: '人像和产品图用低值；小面积高光较多时提高。',
     },
-    edgeSmoothRadius: {
-      title: '边缘平滑半径',
-      summary: '平滑亮部周围的增益图边缘。',
-      effect: '数值越高，光晕和块状过渡越少；但非常锐利的高光边界也会变软。',
-      recommended: '看到 ringing 或边缘伪影时再提高。',
+    headroom: {
+      title: 'Headroom',
+      summary: '设置相对 SDR 基图的目标最大 HDR 扩展。',
+      effect: '它会影响 gain-map metadata headroom 和裁剪保护上限。',
+      recommended: '2 档左右是保守默认值。',
     },
-    smallHighlightPreserve: {
-      title: '小高光保留',
-      summary: '保留容易被平均掉的小亮点。',
-      effect: '数值越高，闪点和细小镜面高光越容易保住，但忙乱区域也可能保留更多噪点。',
-      recommended: '反光场景和细小高光细节可以提高。',
+    midtoneLock: {
+      title: '中灰锁定',
+      summary: '抑制中灰附近的 gain，避免整张图被抬亮。',
+      effect: '数值越高，中间调越接近 SDR 基图，同时保留高光扩展。',
+      recommended: '脸、墙面或中性色产品被抬亮时提高。',
+    },
+    edgeAwareRadius: {
+      title: '边缘感知平滑',
+      summary: '平滑 gain map，同时尽量避免跨过强亮度边缘扩散。',
+      effect: '半径越大，噪声和粗糙过渡越少；半径越小，局部细节越紧。',
+      recommended: '多数图片用 6-14 px。',
+    },
+    edgeAwareEps: {
+      title: '边缘阈值',
+      summary: '控制边缘感知平滑器把亮度变化视为边缘的敏感度。',
+      effect: '数值越低，强边缘保留越多；数值越高，小的明暗变化会被更多平滑。',
+      recommended: '除非看到光晕或噪声 mask，否则保持预设值。',
+    },
+    clipGuard: {
+      title: '裁剪保护',
+      summary: '在高光超过目标 headroom 前柔和降低 gain。',
+      effect: '数值越高越保守，可以减少白色区域过曝裁剪。',
+      recommended: '产品图和白底图建议使用较高值。',
+    },
+    gainMapGamma: {
+      title: 'Gain-map gamma',
+      summary: '控制把 log2 gain 量化到 8-bit gain map 时使用的曲线。',
+      effect: '低于 1 会偏向较低 gain；高于 1 会给细微高光 gain 更多编码空间。',
+      recommended: '除非调试量化，否则保持 1.0。',
+    },
+    whitePointGuard: {
+      title: '白点保护',
+      summary: '设置保护近白区域的高亮百分位。',
+      effect: '数值越低，接近白色的区域越保守；数值越高，小面积高光可获得更强提升。',
+      recommended: '除非白底裁剪，否则保持较高。',
+    },
+    blackPointGuard: {
+      title: '黑点保护',
+      summary: '设置阴影 mask 和极端输入稳定性使用的低亮度百分位。',
+      effect: '数值越高，阴影保护范围越宽；数值越低，只限制最暗像素。',
+      recommended: '大多数图片保持预设值。',
     },
     gainMapResolution: {
-      title: '增益图分辨率',
-      summary: '控制增益图保留多少细节。',
-      effect: '数值越低，文件越小；数值越高，局部细节和高光边界越清楚。',
-      recommended: 'Auto 或 720p 对大多数图片都很合适。',
-      warning: 'Custom 目前只在数据模型里预留。',
+      title: 'Gain-map 分辨率',
+      summary: '控制导出的 gain map 尺寸，以及文件大小与局部细节之间的取舍。',
+      effect: '较低分辨率减小文件；较高分辨率保留辅助图里的高光边界细节。',
+      recommended: 'Auto 适合大多数照片。',
+      warning: 'Custom 目前只保留在数据模型中。',
     },
     heicQuality: {
       title: 'HEIC 质量',
-      summary: '控制最终 HEIC 的压缩质量。',
-      effect: '数值越高，压缩伪影越少，但导出文件会更大，编码也可能稍慢一点。',
-      recommended: '80-90 是比较通用的范围。',
+      summary: '控制最终 HEIC 压缩质量。',
+      effect: '数值越高，压缩伪影越少，但文件更大、编码更慢。',
+      recommended: '80-90 是常用范围。',
     },
   },
-}
-
-export function getParameterHelp(language: Language, key: ParameterHelpKey) {
-  return parameterHelp[language][key]
 }

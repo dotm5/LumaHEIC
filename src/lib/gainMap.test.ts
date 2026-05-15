@@ -6,7 +6,7 @@ import {
   downsampleGainMap,
   encodedGainToMultiplier,
   gainMultiplierToEncoded,
-  generateBypassGainMap,
+  generateSyntheticGainMapV2,
   resolveGainMapSize,
   type RgbaImage,
 } from './gainMap'
@@ -17,6 +17,17 @@ function solid(width: number, height: number, value: number): RgbaImage {
     data[i] = value
     data[i + 1] = value
     data[i + 2] = value
+    data[i + 3] = 255
+  }
+  return { width, height, data }
+}
+
+function solidRgb(width: number, height: number, r: number, g: number, b: number): RgbaImage {
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = r
+    data[i + 1] = g
+    data[i + 2] = b
     data[i + 3] = 255
   }
   return { width, height, data }
@@ -34,59 +45,176 @@ function grayscale(width: number, height: number, values: number[]): RgbaImage {
   return { width, height, data }
 }
 
+function gradient(width: number, height: number): RgbaImage {
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = Math.round((x / Math.max(width - 1, 1)) * 255)
+      const index = (y * width + x) * 4
+      data[index] = value
+      data[index + 1] = value
+      data[index + 2] = value
+      data[index + 3] = 255
+    }
+  }
+  return { width, height, data }
+}
+
+function hardEdge(width: number, height: number): RgbaImage {
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = x < width / 2 ? 0 : 255
+      const index = (y * width + x) * 4
+      data[index] = value
+      data[index + 1] = value
+      data[index + 2] = value
+      data[index + 3] = 255
+    }
+  }
+  return { width, height, data }
+}
+
+function brightPoint(width: number, height: number): RgbaImage {
+  const image = solid(width, height, 72)
+  const point = Math.floor(height / 2) * width + Math.floor(width / 2)
+  const index = point * 4
+  image.data[index] = 255
+  image.data[index + 1] = 255
+  image.data[index + 2] = 255
+  return image
+}
+
+function grayAt(image: RgbaImage, x: number, y: number) {
+  return image.data[(y * image.width + x) * 4]
+}
+
+const pipelineTestControls = {
+  ...defaultBypassOptions,
+  gainMapResolutionMode: 'full' as const,
+  edgeAwareRadius: 0,
+  shadowLift: 0,
+  midtoneLock: 0,
+  colorProtect: 0,
+  clipGuard: 0,
+}
+
 describe('presets', () => {
   it('uses Natural as the conservative default preset', () => {
     expect(defaultPresetId).toBe('natural')
     expect(defaultBypassOptions).toEqual(hdrPresets.natural)
-    expect(defaultBypassOptions.headroom).toBeLessThanOrEqual(3)
-    expect(defaultBypassOptions.strength).toBeLessThanOrEqual(0.65)
-    expect(defaultBypassOptions.exposure).toBe(0)
-    expect(defaultBypassOptions.highlights).toBe(0)
-    expect(defaultBypassOptions.whites).toBe(0)
-    expect(defaultBypassOptions.shadows).toBe(0)
-    expect(defaultBypassOptions.blacks).toBe(0)
+    expect(defaultBypassOptions.hdrStrengthStops).toBeLessThanOrEqual(1.2)
+    expect(defaultBypassOptions.headroomStops).toBeLessThanOrEqual(2)
+    expect(defaultBypassOptions.highlightStartPct).toBeGreaterThanOrEqual(90)
+    expect(defaultBypassOptions.colorProtect).toBeGreaterThan(0.8)
     expect(defaultBypassOptions.gainMapResolutionMode).toBe('auto')
   })
 
-  it('switches to visibly different strength and headroom values', () => {
-    expect(hdrPresets.bright.headroom).toBeGreaterThan(hdrPresets.natural.headroom)
-    expect(hdrPresets.bright.strength).toBeGreaterThan(hdrPresets.natural.strength)
-    expect(hdrPresets.extreme.headroom).toBeGreaterThan(hdrPresets.bright.headroom)
-    expect(hdrPresets.extreme.strength).toBeGreaterThan(hdrPresets.bright.strength)
+  it('includes the first-stage HDR gain-map presets', () => {
+    expect(Object.keys(hdrPresets)).toEqual(['natural', 'bright', 'neonNight', 'soft', 'product'])
+    expect(hdrPresets.bright.hdrStrengthStops).toBeGreaterThan(hdrPresets.natural.hdrStrengthStops)
+    expect(hdrPresets.neonNight.headroomStops).toBeGreaterThan(hdrPresets.bright.headroomStops)
+    expect(hdrPresets.product.colorProtect).toBeGreaterThan(hdrPresets.natural.colorProtect)
   })
 })
 
-describe('gain map generation', () => {
+describe('synthetic gain-map generation v2', () => {
+  it('keeps a grayscale gradient monotonic and avoids dark gain spikes', () => {
+    const result = generateSyntheticGainMapV2(gradient(48, 1), {
+      ...pipelineTestControls,
+      highlightStartPct: 80,
+      highlightRolloffPct: 99.9,
+    })
+    const mask = Array.from({ length: 48 }, (_, x) => grayAt(result.highlightMaskPreview, x, 0))
+
+    for (let i = 1; i < mask.length; i++) {
+      expect(mask[i]).toBeGreaterThanOrEqual(mask[i - 1])
+    }
+    expect(grayAt(result.gainMapPreview, 2, 0)).toBeLessThan(8)
+    expect(grayAt(result.gainMapPreview, 46, 0)).toBeGreaterThan(grayAt(result.gainMapPreview, 2, 0))
+  })
+
+  it('keeps edge-aware smoothing from heavily leaking across a black-white edge', () => {
+    const result = generateSyntheticGainMapV2(hardEdge(32, 8), {
+      ...pipelineTestControls,
+      highlightStartPct: 50,
+      highlightRolloffPct: 99.9,
+      edgeAwareRadius: 8,
+      edgeAwareEps: 0.0001,
+    })
+
+    const leftNearEdge = grayAt(result.gainMapPreview, 14, 4)
+    const rightNearEdge = grayAt(result.gainMapPreview, 17, 4)
+    expect(leftNearEdge).toBeLessThan(45)
+    expect(rightNearEdge).toBeGreaterThan(leftNearEdge + 80)
+  })
+
+  it('reduces gain on saturated color when color protection increases', () => {
+    const image = solidRgb(8, 8, 255, 255, 0)
+    const unprotected = generateSyntheticGainMapV2(image, {
+      ...pipelineTestControls,
+      hdrStrengthStops: 2,
+      colorProtect: 0,
+    })
+    const protectedResult = generateSyntheticGainMapV2(image, {
+      ...pipelineTestControls,
+      hdrStrengthStops: 2,
+      colorProtect: 1,
+    })
+
+    expect(protectedResult.stats.gain.max).toBeLessThan(unprotected.stats.gain.max)
+  })
+
+  it('lets a small high point receive more gain than the surrounding image', () => {
+    const result = generateSyntheticGainMapV2(brightPoint(16, 16), {
+      ...pipelineTestControls,
+      hdrStrengthStops: 2,
+      highlightStartPct: 95,
+      highlightRolloffPct: 99.9,
+    })
+
+    const center = grayAt(result.gainMapPreview, 8, 8)
+    const background = grayAt(result.gainMapPreview, 0, 0)
+    expect(center).toBeGreaterThan(background + 80)
+  })
+
+  it('uses clip guard to reduce excessive gain on a bright white field', () => {
+    const image = solid(12, 12, 255)
+    const unguarded = generateSyntheticGainMapV2(image, {
+      ...pipelineTestControls,
+      hdrStrengthStops: 3,
+      headroomStops: 1,
+      clipGuard: 0,
+    })
+    const guarded = generateSyntheticGainMapV2(image, {
+      ...pipelineTestControls,
+      hdrStrengthStops: 3,
+      headroomStops: 1,
+      clipGuard: 1,
+    })
+
+    expect(guarded.stats.gain.max).toBeLessThan(unguarded.stats.gain.max)
+  })
+
+  it('handles all-black and all-white extreme inputs without invalid stats', () => {
+    for (const image of [solid(8, 8, 0), solid(8, 8, 255)]) {
+      const result = generateSyntheticGainMapV2(image, pipelineTestControls)
+      expect(Number.isFinite(result.stats.gain.min)).toBe(true)
+      expect(Number.isFinite(result.stats.gain.max)).toBe(true)
+      expect(Number.isFinite(result.stats.gain.mean)).toBe(true)
+      for (const value of result.gainMap.data) {
+        expect(value).toBeGreaterThanOrEqual(0)
+        expect(value).toBeLessThanOrEqual(255)
+      }
+    }
+    expect(generateSyntheticGainMapV2(solid(8, 8, 0), pipelineTestControls).stats.activePixels).toBe(0)
+  })
+
   it('keeps low luminance inputs effectively inactive', () => {
     const image = solid(8, 8, 12)
-    const result = generateBypassGainMap(image, defaultBypassOptions)
+    const result = generateSyntheticGainMapV2(image, pipelineTestControls)
     expect(result.stats.activePixels).toBe(0)
     expect(detectUsefulGain(image).isLowDynamicRange).toBe(true)
-  })
-
-  it('raises gain when highlights pass the highlight range', () => {
-    const dark = generateBypassGainMap(solid(8, 8, 64), defaultBypassOptions)
-    const bright = generateBypassGainMap(solid(8, 8, 252), defaultBypassOptions)
-    expect(bright.stats.meanGain).toBeGreaterThan(dark.stats.meanGain)
-    expect(bright.stats.activePixels).toBe(64)
-  })
-
-  it('allows tone sliders below neutral to reduce generated gain', () => {
-    const image = solid(8, 8, 252)
-    const reduced = generateBypassGainMap(image, {
-      ...defaultBypassOptions,
-      highlights: -1,
-      whites: -1,
-    })
-    const neutral = generateBypassGainMap(image, defaultBypassOptions)
-    const boosted = generateBypassGainMap(image, {
-      ...defaultBypassOptions,
-      highlights: 1,
-      whites: 1,
-    })
-
-    expect(reduced.stats.meanGain).toBeLessThan(neutral.stats.meanGain)
-    expect(boosted.stats.meanGain).toBeGreaterThan(neutral.stats.meanGain)
   })
 })
 
@@ -148,9 +276,8 @@ describe('Base + Gain Map authoring', () => {
   it('packages an uploaded grayscale gain map as encoded luma', () => {
     const result = authorBasePlusGainMap(solid(2, 1, 120), grayscale(2, 1, [0, 255]), {
       ...defaultBypassOptions,
-      headroom: 4,
+      headroomStops: 2,
       gainMapResolutionMode: 'full',
-      smallHighlightPreserve: 0,
     })
 
     expect(result.gainMap.width).toBe(2)

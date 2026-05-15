@@ -413,6 +413,8 @@
   color: var(--text-strong);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .primary-action {
@@ -474,7 +476,7 @@
 
 .preview-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -523,7 +525,7 @@
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -600,5 +602,11 @@
 
   .metrics div:last-child {
     border-bottom: 0;
+  }
+}
+
+@media (max-width: 1280px) and (min-width: 941px) {
+  .preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

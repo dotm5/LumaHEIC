@@ -8,6 +8,8 @@ type NativeModule = {
 }
 
 let nativeModulePromise: Promise<NativeModule | null> | null = null
+const encoderModuleUrl = `${import.meta.env.BASE_URL}encoders/apple-hdr-heic.js`
+const encoderAssetUrl = (path: string) => `${import.meta.env.BASE_URL}encoders/${path}`
 
 export async function encodeAppleHdrHeic(request: HeicEncodeRequest): Promise<HeicEncodeResult> {
   const nativeModule = await loadNativeEncoder().catch((error) => {
@@ -20,20 +22,33 @@ export async function encodeAppleHdrHeic(request: HeicEncodeRequest): Promise<He
 }
 
 async function loadNativeEncoder() {
-  nativeModulePromise ??= import(
-    /* @vite-ignore */ `${self.location.origin}${import.meta.env.BASE_URL}encoders/apple-hdr-heic.js`
-  ).then(async (mod: { default?: (opts: object) => Promise<NativeModule> }) => {
-    if (!mod.default) return null
-    return mod.default({
-      locateFile: (path: string) => `${import.meta.env.BASE_URL}encoders/${path}`,
-    })
-  })
+  nativeModulePromise ??= loadNativeEncoderModule()
 
   return nativeModulePromise
 }
 
+async function loadNativeEncoderModule() {
+  const response = await fetch(encoderModuleUrl, { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} when fetching encoder module`)
+  }
+
+  const source = await response.text()
+  const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
+  try {
+    const mod = await import(/* @vite-ignore */ blobUrl)
+    if (!mod.default) return null
+    return mod.default({
+      locateFile: (path: string) => encoderAssetUrl(path),
+    })
+  } finally {
+    URL.revokeObjectURL(blobUrl)
+  }
+}
+
 function encodeWithNativeModule(module: NativeModule, request: HeicEncodeRequest): HeicEncodeResult {
   const { result, options, quality } = request
+  const headroom = Math.pow(2, options.headroomStops)
   const basePtr = copyIntoHeap(module, result.base.data)
   const gainPtr = copyIntoHeap(module, result.gainMap.data)
   const outPtrPtr = module._malloc(4)
@@ -64,7 +79,7 @@ function encodeWithNativeModule(module: NativeModule, request: HeicEncodeRequest
         result.gainMap.width,
         result.gainMap.height,
         quality,
-        options.headroom,
+        headroom,
         outPtrPtr,
         outLenPtr,
         0,

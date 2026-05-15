@@ -15,6 +15,7 @@ import type { HeicEncodeResult } from './lib/encoderTypes'
 import {
   defaultBypassOptions,
   detectUsefulGain,
+  normalizeHdrGainMapControls,
   type BypassOptions,
   type GainMapResult,
   type RgbaImage,
@@ -32,6 +33,7 @@ import { decodeImageFile, imageToPngUrl } from './lib/imageIo'
 
 type PreviewState = {
   baseUrl: string
+  maskUrl: string
   gainUrl: string
   hdrUrl: string
 }
@@ -55,14 +57,6 @@ const worker = new Worker(new URL('./workers/bypassWorker.ts', import.meta.url),
 
 let nextRequestId = 1
 const showDebugControls = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug')
-const extremeGainMapOptions: BypassOptions = {
-  ...hdrPresets.extreme,
-  headroom: 8,
-  strength: 1,
-  gainMapResolutionMode: 'full',
-}
-const toneSliderMin = -1
-const toneSliderMax = 1
 
 function App() {
   const [language, setLanguage] = React.useState<Language>(() => getInitialLanguage())
@@ -73,7 +67,6 @@ function App() {
   const [gainMapName, setGainMapName] = React.useState('')
   const [gainMapImage, setGainMapImage] = React.useState<RgbaImage | null>(null)
   const [options, setOptions] = React.useState<BypassOptions>(defaultBypassOptions)
-  const [extremeGainMap, setExtremeGainMap] = React.useState(false)
   const [quality, setQuality] = React.useState(82)
   const [preview, setPreview] = React.useState<PreviewState | null>(null)
   const [result, setResult] = React.useState<GainMapResult | null>(null)
@@ -137,6 +130,7 @@ function App() {
           revokePreview(current)
           return {
             baseUrl: imageToPngUrl(nextResult.base),
+            maskUrl: imageToPngUrl(nextResult.highlightMaskPreview),
             gainUrl: imageToPngUrl(nextResult.gainMapPreview),
             hdrUrl: imageToPngUrl(nextResult.hdrPreview),
           }
@@ -164,22 +158,14 @@ function App() {
     }
   }, [])
 
-  const setExtremeDebugMode = (enabled: boolean) => {
-    setExtremeGainMap(enabled)
-    setCurrentPreset(enabled ? 'custom' : defaultPresetId)
-    setOptions(enabled ? extremeGainMapOptions : defaultBypassOptions)
-  }
-
   const applyPreset = (presetId: PresetId) => {
     setCurrentPreset(presetId)
-    setExtremeGainMap(false)
     setOptions(hdrPresets[presetId])
   }
 
   const updateOptions = (patch: Partial<BypassOptions>) => {
     setCurrentPreset('custom')
-    setExtremeGainMap(false)
-    setOptions((state) => ({ ...state, ...patch }))
+    setOptions((state) => normalizeHdrGainMapControls({ ...state, ...patch }))
   }
 
   const handleImageFile = async (file: File | null, target: 'source' | 'gain-map') => {
@@ -386,189 +372,161 @@ function App() {
             />
             <Slider
               language={language}
-              label={t.exposure}
-              help={help.exposure}
-              value={options.exposure}
-              min={toneSliderMin}
-              max={toneSliderMax}
-              step={0.01}
-              format={(v) => `${formatTonePercent(v)} (${v > 0 ? '+' : ''}${v.toFixed(2)} EV)`}
-              onChange={(exposure) => updateOptions({ exposure })}
-            />
-            <Slider
-              language={language}
-              label={t.highlights}
-              help={help.highlights}
-              value={options.highlights}
-              min={toneSliderMin}
-              max={toneSliderMax}
-              step={0.01}
-              format={formatTonePercent}
-              onChange={(highlights) => updateOptions({ highlights })}
-            />
-            <Slider
-              language={language}
-              label={t.whites}
-              help={help.whites}
-              value={options.whites}
-              min={toneSliderMin}
-              max={toneSliderMax}
-              step={0.01}
-              format={formatTonePercent}
-              onChange={(whites) => updateOptions({ whites })}
-            />
-            <Slider
-              language={language}
-              label={t.shadows}
-              help={help.shadows}
-              value={options.shadows}
-              min={toneSliderMin}
-              max={toneSliderMax}
-              step={0.01}
-              format={formatTonePercent}
-              onChange={(shadows) => updateOptions({ shadows })}
-            />
-            <Slider
-              language={language}
-              label={t.blacks}
-              help={help.blacks}
-              value={options.blacks}
-              min={toneSliderMin}
-              max={toneSliderMax}
-              step={0.01}
-              format={formatTonePercent}
-              onChange={(blacks) => updateOptions({ blacks })}
-            />
-            <Slider
-              language={language}
               label={t.hdrStrength}
               help={help.hdrStrength}
-              value={options.strength}
+              value={options.hdrStrengthStops}
               min={0}
-              max={1}
-              step={0.01}
-              format={formatPercent}
-              onChange={(strength) => updateOptions({ strength })}
-            />
-            <Slider
-              language={language}
-              label={t.peakHeadroom}
-              help={help.peakHeadroom}
-              value={options.headroom}
-              min={1.05}
-              max={8}
+              max={3}
               step={0.05}
-              format={(v) => `${v.toFixed(2)}x`}
-              onChange={(headroom) => updateOptions({ headroom })}
+              format={(v) => `${v.toFixed(2)} ${t.stops}`}
+              onChange={(hdrStrengthStops) => updateOptions({ hdrStrengthStops })}
             />
-            <Slider
-              language={language}
-              label={t.glow}
-              help={help.glow}
-              value={options.glow}
-              min={0}
-              max={1}
-              step={0.01}
-              format={formatPercent}
-              onChange={(glow) => updateOptions({ glow })}
-            />
-            <Slider
-              language={language}
-              label={t.protection}
-              help={help.protection}
-              value={(options.shadowProtect + options.saturationProtect + options.skinProtect) / 3}
-              min={0}
-              max={1}
-              step={0.01}
-              format={formatPercent}
-              onChange={(protection) =>
-                updateOptions({
-                  shadowProtect: protection,
-                  saturationProtect: protection,
-                  skinProtect: protection,
-                })
-              }
-            />
-          </section>
-
-          <details className="control-section" open>
-            <summary>{t.advancedControls}</summary>
             <Slider
               language={language}
               label={t.highlightStart}
               help={help.highlightStart}
-              value={options.highlightStart}
-              min={0.05}
-              max={0.95}
-              step={0.01}
-              format={formatPercent}
-              onChange={(highlightStart) => updateOptions({ highlightStart })}
+              value={options.highlightStartPct}
+              min={80}
+              max={99.5}
+              step={0.1}
+              format={formatPercentPoint}
+              onChange={(highlightStartPct) => updateOptions({ highlightStartPct })}
             />
             <Slider
               language={language}
-              label={t.highlightEnd}
-              help={help.highlightEnd}
-              value={options.highlightEnd}
-              min={0.05}
-              max={1}
-              step={0.01}
-              format={formatPercent}
-              onChange={(highlightEnd) => updateOptions({ highlightEnd })}
+              label={t.highlightRolloff}
+              help={help.highlightRolloff}
+              value={options.highlightRolloffPct}
+              min={Math.min(99.8, options.highlightStartPct + 0.1)}
+              max={99.9}
+              step={0.1}
+              format={formatPercentPoint}
+              onChange={(highlightRolloffPct) => updateOptions({ highlightRolloffPct })}
             />
             <Slider
               language={language}
-              label={t.shadowProtect}
-              help={help.shadowProtect}
-              value={options.shadowProtect}
+              label={t.shadowLift}
+              help={help.shadowLift}
+              value={options.shadowLift}
+              min={0}
+              max={0.5}
+              step={0.01}
+              format={formatPercent}
+              onChange={(shadowLift) => updateOptions({ shadowLift })}
+            />
+            <Slider
+              language={language}
+              label={t.colorProtect}
+              help={help.colorProtect}
+              value={options.colorProtect}
               min={0}
               max={1}
               step={0.01}
               format={formatPercent}
-              onChange={(shadowProtect) => updateOptions({ shadowProtect })}
+              onChange={(colorProtect) => updateOptions({ colorProtect })}
             />
             <Slider
               language={language}
-              label={t.saturationProtect}
-              help={help.saturationProtect}
-              value={options.saturationProtect}
+              label={t.detail}
+              help={help.detail}
+              value={options.detail}
+              min={0}
+              max={0.5}
+              step={0.01}
+              format={formatPercent}
+              onChange={(detail) => updateOptions({ detail })}
+            />
+          </section>
+
+          <details className="control-section">
+            <summary>{t.advancedControls}</summary>
+            <Slider
+              language={language}
+              label={t.headroom}
+              help={help.headroom}
+              value={options.headroomStops}
+              min={0}
+              max={4}
+              step={0.05}
+              format={(v) => `${v.toFixed(2)} ${t.stops}`}
+              onChange={(headroomStops) => updateOptions({ headroomStops })}
+            />
+            <Slider
+              language={language}
+              label={t.midtoneLock}
+              help={help.midtoneLock}
+              value={options.midtoneLock}
               min={0}
               max={1}
               step={0.01}
               format={formatPercent}
-              onChange={(saturationProtect) => updateOptions({ saturationProtect })}
+              onChange={(midtoneLock) => updateOptions({ midtoneLock })}
             />
             <Slider
               language={language}
-              label={t.skinProtect}
-              help={help.skinProtect}
-              value={options.skinProtect}
+              label={t.edgeAwareSmoothness}
+              help={help.edgeAwareRadius}
+              value={options.edgeAwareRadius}
               min={0}
-              max={1}
-              step={0.01}
-              format={formatPercent}
-              onChange={(skinProtect) => updateOptions({ skinProtect })}
-            />
-            <Slider
-              language={language}
-              label={t.edgeSmoothRadius}
-              help={help.edgeSmoothRadius}
-              value={options.edgeSmoothRadius}
-              min={0}
-              max={40}
+              max={32}
               step={1}
               format={(v) => `${Math.round(v)} px`}
-              onChange={(edgeSmoothRadius) => updateOptions({ edgeSmoothRadius })}
+              onChange={(edgeAwareRadius) => updateOptions({ edgeAwareRadius })}
             />
             <Slider
               language={language}
-              label={t.smallHighlightPreserve}
-              help={help.smallHighlightPreserve}
-              value={options.smallHighlightPreserve}
+              label={t.edgeAwareEps}
+              help={help.edgeAwareEps}
+              value={options.edgeAwareEps}
+              min={0.0001}
+              max={0.02}
+              step={0.0001}
+              format={(v) => v.toFixed(4)}
+              onChange={(edgeAwareEps) => updateOptions({ edgeAwareEps })}
+            />
+            <Slider
+              language={language}
+              label={t.clipGuard}
+              help={help.clipGuard}
+              value={options.clipGuard}
               min={0}
               max={1}
               step={0.01}
               format={formatPercent}
-              onChange={(smallHighlightPreserve) => updateOptions({ smallHighlightPreserve })}
+              onChange={(clipGuard) => updateOptions({ clipGuard })}
+            />
+            <Slider
+              language={language}
+              label={t.gainMapGamma}
+              help={help.gainMapGamma}
+              value={options.gainMapGamma}
+              min={0.6}
+              max={2.2}
+              step={0.01}
+              format={(v) => v.toFixed(2)}
+              onChange={(gainMapGamma) => updateOptions({ gainMapGamma })}
+            />
+            <Slider
+              language={language}
+              label={t.whitePointGuard}
+              help={help.whitePointGuard}
+              value={options.whitePointGuardPct}
+              min={98}
+              max={99.95}
+              step={0.05}
+              format={formatPercentPoint}
+              onChange={(whitePointGuardPct) => updateOptions({ whitePointGuardPct })}
+            />
+            <Slider
+              language={language}
+              label={t.blackPointGuard}
+              help={help.blackPointGuard}
+              value={options.blackPointGuardPct}
+              min={0}
+              max={2}
+              step={0.05}
+              format={formatPercentPoint}
+              onChange={(blackPointGuardPct) => updateOptions({ blackPointGuardPct })}
             />
             <SelectRow
               language={language}
@@ -588,14 +546,6 @@ function App() {
           {showDebugControls && (
             <section className="control-section debug-section">
               <h3>{t.debugControls}</h3>
-              <label className="debug-toggle">
-                <input
-                  type="checkbox"
-                  checked={extremeGainMap}
-                  onChange={(event) => setExtremeDebugMode(event.target.checked)}
-                />
-                <span>{t.extremeGainDebug}</span>
-              </label>
               <dl className="debug-list">
                 <div>
                   <dt>{t.currentPreset}</dt>
@@ -604,6 +554,18 @@ function App() {
                 <div>
                   <dt>{t.gainMapOutputSize}</dt>
                   <dd>{result ? `${result.gainMap.width} x ${result.gainMap.height}` : '-'}</dd>
+                </div>
+                <div>
+                  <dt>{t.luminanceStats}</dt>
+                  <dd>{result ? formatLuminanceStats(result) : '-'}</dd>
+                </div>
+                <div>
+                  <dt>{t.gainStats}</dt>
+                  <dd>{result ? formatGainStats(result) : '-'}</dd>
+                </div>
+                <div>
+                  <dt>{t.processingTime}</dt>
+                  <dd>{result?.stats.timings ? `${result.stats.timings.totalMs.toFixed(1)} ms` : '-'}</dd>
                 </div>
               </dl>
               {preview?.gainUrl && (
@@ -645,6 +607,7 @@ function App() {
         <section className="preview-panel">
           <div className="preview-grid">
             <Preview title={t.sdrBase} url={preview?.baseUrl} />
+            <Preview title={inputMode === 'single-image-enhance' ? t.highlightMask : t.suppliedGainMap} url={preview?.maskUrl} />
             <Preview title={t.gainMap} url={preview?.gainUrl} />
             <Preview title={t.hdrReference} url={preview?.hdrUrl} />
           </div>
@@ -660,6 +623,8 @@ function App() {
               value={result ? `${Math.round((result.stats.activePixels / (result.base.width * result.base.height)) * 100)}%` : '-'}
             />
             <Metric label={t.headroom} value={result ? `${result.stats.headroomStops.toFixed(2)} ${t.stops}` : '-'} />
+            <Metric label={t.luminanceP95} value={result ? formatLinear(result.stats.luminance.p95) : '-'} />
+            <Metric label={t.gainLog2Range} value={result ? `${result.stats.gain.min.toFixed(2)}-${result.stats.gain.max.toFixed(2)}` : '-'} />
           </div>
 
           {output && <p className="output-note">{translateOutputLabel(output.label, t)}</p>}
@@ -763,8 +728,22 @@ function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`
 }
 
-function formatTonePercent(value: number) {
-  return `${Math.round(((value + 1) / 2) * 100)}%`
+function formatPercentPoint(value: number) {
+  return `${value.toFixed(value < 10 ? 2 : 1)}%`
+}
+
+function formatLinear(value: number) {
+  return value < 0.01 ? value.toExponential(1) : value.toFixed(3)
+}
+
+function formatLuminanceStats(result: GainMapResult) {
+  const { p50, p90, p95, p99, p99_9 } = result.stats.luminance
+  return `p50 ${formatLinear(p50)} / p90 ${formatLinear(p90)} / p95 ${formatLinear(p95)} / p99 ${formatLinear(p99)} / p99.9 ${formatLinear(p99_9)}`
+}
+
+function formatGainStats(result: GainMapResult) {
+  const { min, max, mean, encodedMin, encodedMax } = result.stats.gain
+  return `log2 ${min.toFixed(2)}-${max.toFixed(2)} / mean ${mean.toFixed(2)} / encoded ${encodedMin}-${encodedMax}`
 }
 
 function presetTranslationKey(id: PresetId) {

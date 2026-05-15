@@ -10,86 +10,150 @@ export type GainMapResolutionMode =
 
 export type InputMode = 'single-image-enhance' | 'base-plus-gain-map'
 
-export type PresetId = 'natural' | 'bright' | 'extreme'
+export type HdrPresetId = 'natural' | 'bright' | 'neonNight' | 'soft' | 'product'
+export type PresetId = HdrPresetId
+export type PresetSelection = HdrPresetId | 'custom'
 
-export type PresetSelection = PresetId | 'custom'
-
-export type BypassOptions = {
-  headroom: number
-  strength: number
-  exposure: number
-  highlights: number
-  whites: number
-  shadows: number
-  blacks: number
-  highlightStart: number
-  highlightEnd: number
-  shadowProtect: number
-  saturationProtect: number
-  skinProtect: number
-  glow: number
-  edgeSmoothRadius: number
-  smallHighlightPreserve: number
+export type HdrGainMapControls = {
+  preset: HdrPresetId
+  hdrStrengthStops: number
+  highlightStartPct: number
+  highlightRolloffPct: number
+  shadowLift: number
+  colorProtect: number
+  detail: number
+  headroomStops: number
+  midtoneLock: number
+  whitePointGuardPct: number
+  blackPointGuardPct: number
+  edgeAwareRadius: number
+  edgeAwareEps: number
+  clipGuard: number
+  gainMapGamma: number
   gainMapResolutionMode: GainMapResolutionMode
   customGainMapWidth?: number
   customGainMapHeight?: number
 }
 
-export const defaultPresetId: PresetId = 'natural'
+export type BypassOptions = HdrGainMapControls
 
-export const hdrPresets: Record<PresetId, BypassOptions> = {
+export type LegacyBypassOptions = Partial<
+  HdrGainMapControls & {
+    strength: number
+    headroom: number
+    exposure: number
+    highlights: number
+    whites: number
+    shadows: number
+    blacks: number
+    highlightStart: number
+    highlightEnd: number
+    shadowProtect: number
+    saturationProtect: number
+    skinProtect: number
+    glow: number
+    edgeSmoothRadius: number
+    smallHighlightPreserve: number
+    protection: number
+  }
+>
+
+export const defaultPresetId: HdrPresetId = 'natural'
+
+export const defaultHdrGainMapControls: HdrGainMapControls = {
+  preset: defaultPresetId,
+  hdrStrengthStops: 1.2,
+  highlightStartPct: 95.0,
+  highlightRolloffPct: 99.7,
+  shadowLift: 0.15,
+  colorProtect: 0.85,
+  detail: 0.12,
+  headroomStops: 2.0,
+  midtoneLock: 0.6,
+  whitePointGuardPct: 99.8,
+  blackPointGuardPct: 0.2,
+  edgeAwareRadius: 8,
+  edgeAwareEps: 0.001,
+  clipGuard: 0.85,
+  gainMapGamma: 1.0,
+  gainMapResolutionMode: 'auto',
+}
+
+export const hdrPresets: Record<HdrPresetId, HdrGainMapControls> = {
   natural: {
-    headroom: 3.0,
-    strength: 0.65,
-    exposure: 0.0,
-    highlights: 0.0,
-    whites: 0.0,
-    shadows: 0.0,
-    blacks: 0.0,
-    highlightStart: 0.68,
-    highlightEnd: 0.96,
-    shadowProtect: 0.75,
-    saturationProtect: 0.55,
-    skinProtect: 0.65,
-    glow: 0.25,
-    edgeSmoothRadius: 12,
-    smallHighlightPreserve: 0.35,
-    gainMapResolutionMode: 'auto',
+    ...defaultHdrGainMapControls,
+    preset: 'natural',
   },
   bright: {
-    headroom: 4.0,
-    strength: 0.8,
-    exposure: 0.0,
-    highlights: 0.24,
-    whites: 0.2,
-    shadows: 0.0,
-    blacks: 0.0,
-    highlightStart: 0.62,
-    highlightEnd: 0.94,
-    shadowProtect: 0.7,
-    saturationProtect: 0.5,
-    skinProtect: 0.6,
-    glow: 0.32,
-    edgeSmoothRadius: 14,
-    smallHighlightPreserve: 0.45,
+    preset: 'bright',
+    hdrStrengthStops: 1.8,
+    highlightStartPct: 92.0,
+    highlightRolloffPct: 99.5,
+    shadowLift: 0.3,
+    colorProtect: 0.75,
+    detail: 0.18,
+    headroomStops: 2.5,
+    midtoneLock: 0.45,
+    whitePointGuardPct: 99.7,
+    blackPointGuardPct: 0.25,
+    edgeAwareRadius: 8,
+    edgeAwareEps: 0.0012,
+    clipGuard: 0.75,
+    gainMapGamma: 1.04,
     gainMapResolutionMode: 'auto',
   },
-  extreme: {
-    headroom: 6.0,
-    strength: 1.0,
-    exposure: 0.0,
-    highlights: 0.64,
-    whites: 0.57,
-    shadows: 0.08,
-    blacks: 0.0,
-    highlightStart: 0.48,
-    highlightEnd: 0.9,
-    shadowProtect: 0.55,
-    saturationProtect: 0.35,
-    skinProtect: 0.45,
-    glow: 0.45,
-    edgeSmoothRadius: 18,
-    smallHighlightPreserve: 0.65,
+  neonNight: {
+    preset: 'neonNight',
+    hdrStrengthStops: 2.2,
+    highlightStartPct: 90.0,
+    highlightRolloffPct: 99.8,
+    shadowLift: 0.22,
+    colorProtect: 0.9,
+    detail: 0.22,
+    headroomStops: 3.0,
+    midtoneLock: 0.7,
+    whitePointGuardPct: 99.85,
+    blackPointGuardPct: 0.1,
+    edgeAwareRadius: 6,
+    edgeAwareEps: 0.0008,
+    clipGuard: 0.8,
+    gainMapGamma: 1.08,
+    gainMapResolutionMode: 'auto',
+  },
+  soft: {
+    preset: 'soft',
+    hdrStrengthStops: 1.5,
+    highlightStartPct: 94.0,
+    highlightRolloffPct: 99.6,
+    shadowLift: 0.18,
+    colorProtect: 0.8,
+    detail: 0.05,
+    headroomStops: 2.2,
+    midtoneLock: 0.6,
+    whitePointGuardPct: 99.75,
+    blackPointGuardPct: 0.2,
+    edgeAwareRadius: 14,
+    edgeAwareEps: 0.0015,
+    clipGuard: 0.85,
+    gainMapGamma: 0.96,
+    gainMapResolutionMode: 'auto',
+  },
+  product: {
+    preset: 'product',
+    hdrStrengthStops: 1.0,
+    highlightStartPct: 97.0,
+    highlightRolloffPct: 99.9,
+    shadowLift: 0.08,
+    colorProtect: 0.95,
+    detail: 0.06,
+    headroomStops: 1.8,
+    midtoneLock: 0.75,
+    whitePointGuardPct: 99.92,
+    blackPointGuardPct: 0.15,
+    edgeAwareRadius: 6,
+    edgeAwareEps: 0.0008,
+    clipGuard: 0.9,
+    gainMapGamma: 1.0,
     gainMapResolutionMode: 'auto',
   },
 }
@@ -106,3 +170,144 @@ export const gainMapResolutionModes: GainMapResolutionMode[] = [
   'full',
   'custom',
 ]
+
+export function normalizeHdrGainMapControls(
+  input: Partial<HdrGainMapControls> & LegacyBypassOptions = {},
+): HdrGainMapControls {
+  const preset = isHdrPresetId(input.preset) ? input.preset : defaultPresetId
+  const fallback = hdrPresets[preset]
+  const migrated = migrateLegacyControls(input)
+  const merged = {
+    ...fallback,
+    ...migrated,
+    ...input,
+    preset,
+  }
+
+  const highlightStartPct = clamp(merged.highlightStartPct, 80.0, 99.5)
+  const highlightRolloffPct = clamp(merged.highlightRolloffPct, highlightStartPct + 0.1, 99.9)
+
+  return {
+    preset,
+    hdrStrengthStops: clamp(merged.hdrStrengthStops, 0, 3),
+    highlightStartPct,
+    highlightRolloffPct,
+    shadowLift: clamp(merged.shadowLift, 0, 0.5),
+    colorProtect: clamp(merged.colorProtect, 0, 1),
+    detail: clamp(merged.detail, 0, 0.5),
+    headroomStops: clamp(merged.headroomStops, 0, 4),
+    midtoneLock: clamp(merged.midtoneLock, 0, 1),
+    whitePointGuardPct: clamp(merged.whitePointGuardPct, 98.0, 99.95),
+    blackPointGuardPct: clamp(merged.blackPointGuardPct, 0.0, 2.0),
+    edgeAwareRadius: Math.round(clamp(merged.edgeAwareRadius, 0, 32)),
+    edgeAwareEps: clamp(merged.edgeAwareEps, 0.0001, 0.02),
+    clipGuard: clamp(merged.clipGuard, 0, 1),
+    gainMapGamma: clamp(merged.gainMapGamma, 0.6, 2.2),
+    gainMapResolutionMode: merged.gainMapResolutionMode ?? 'auto',
+    customGainMapWidth: normalizePositiveInteger(merged.customGainMapWidth),
+    customGainMapHeight: normalizePositiveInteger(merged.customGainMapHeight),
+  }
+}
+
+export function isHdrPresetId(value: unknown): value is HdrPresetId {
+  return value === 'natural' || value === 'bright' || value === 'neonNight' || value === 'soft' || value === 'product'
+}
+
+function migrateLegacyControls(input: LegacyBypassOptions): Partial<HdrGainMapControls> {
+  const strength =
+    typeof input.hdrStrengthStops === 'number'
+      ? input.hdrStrengthStops
+      : typeof input.strength === 'number'
+        ? input.strength * 1.85
+        : undefined
+
+  const headroomStops =
+    typeof input.headroomStops === 'number'
+      ? input.headroomStops
+      : typeof input.headroom === 'number'
+        ? Math.log2(Math.max(input.headroom, 1.0001))
+        : undefined
+
+  const highlightStartPct =
+    typeof input.highlightStartPct === 'number'
+      ? input.highlightStartPct
+      : typeof input.highlightStart === 'number'
+        ? 80 + clamp(input.highlightStart, 0, 1) * 19.5
+        : undefined
+
+  const highlightRolloffPct =
+    typeof input.highlightRolloffPct === 'number'
+      ? input.highlightRolloffPct
+      : typeof input.highlightEnd === 'number'
+        ? 80 + clamp(input.highlightEnd, 0, 1) * 19.5
+        : undefined
+
+  const protection =
+    typeof input.colorProtect === 'number'
+      ? input.colorProtect
+      : typeof input.protection === 'number'
+        ? input.protection
+        : undefined
+
+  const shadowLift =
+    typeof input.shadowLift === 'number'
+      ? input.shadowLift
+      : typeof input.shadows === 'number' || typeof input.blacks === 'number'
+        ? clamp(
+            0.15 +
+              Math.max(0, input.shadows ?? 0) * 0.2 +
+              Math.max(0, input.blacks ?? 0) * 0.1,
+            0,
+            0.5,
+          )
+        : undefined
+
+  const detail =
+    typeof input.detail === 'number'
+      ? input.detail
+      : typeof input.highlights === 'number' || typeof input.whites === 'number'
+        ? clamp(
+            0.08 +
+              Math.max(0, input.highlights ?? 0) * 0.12 +
+              Math.max(0, input.whites ?? 0) * 0.08,
+            0,
+            0.5,
+          )
+        : undefined
+
+  return {
+    hdrStrengthStops: strength,
+    headroomStops,
+    highlightStartPct,
+    highlightRolloffPct,
+    colorProtect: protection,
+    shadowLift,
+    detail,
+    clipGuard:
+      typeof input.clipGuard === 'number'
+        ? input.clipGuard
+        : typeof input.shadowProtect === 'number'
+          ? input.shadowProtect
+          : protection,
+    gainMapGamma: input.gainMapGamma,
+    edgeAwareRadius:
+      typeof input.edgeAwareRadius === 'number'
+        ? input.edgeAwareRadius
+        : typeof input.edgeSmoothRadius === 'number'
+          ? input.edgeSmoothRadius
+          : undefined,
+    edgeAwareEps: input.edgeAwareEps,
+    gainMapResolutionMode: input.gainMapResolutionMode,
+    customGainMapWidth: normalizePositiveInteger(input.customGainMapWidth),
+    customGainMapHeight: normalizePositiveInteger(input.customGainMapHeight),
+  }
+}
+
+function normalizePositiveInteger(value: number | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
+  return Math.max(1, Math.round(value))
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}

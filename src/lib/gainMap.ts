@@ -1,17 +1,39 @@
 import {
   defaultBypassOptions,
+  defaultHdrGainMapControls,
+  gainMapResolutionModes,
+  hdrPresets,
+  normalizeHdrGainMapControls,
   type BypassOptions,
   type GainMapResolutionMode,
+  type HdrGainMapControls,
   type InputMode,
 } from './authoring'
 
-export { defaultBypassOptions }
-export type { BypassOptions, GainMapResolutionMode, InputMode }
+export { defaultBypassOptions, defaultHdrGainMapControls, gainMapResolutionModes, hdrPresets, normalizeHdrGainMapControls }
+export type { BypassOptions, GainMapResolutionMode, HdrGainMapControls, InputMode }
 
 export type RgbaImage = {
   width: number
   height: number
   data: Uint8ClampedArray
+}
+
+export type LuminanceStats = {
+  p50: number
+  p90: number
+  p95: number
+  p99: number
+  p99_9: number
+}
+
+export type GainStats = {
+  min: number
+  max: number
+  mean: number
+  encodedMin: number
+  encodedMax: number
+  encodedMean: number
 }
 
 export type GainMapResult = {
@@ -22,20 +44,39 @@ export type GainMapResult = {
     data: Uint8Array
   }
   gainMapPreview: RgbaImage
+  highlightMaskPreview: RgbaImage
   hdrPreview: RgbaImage
   stats: {
-    maxLuminance: number
-    meanGain: number
+    luminance: LuminanceStats
+    gain: GainStats
     activePixels: number
     headroomStops: number
+    gainMapGamma: number
+    thresholds: {
+      blackPoint: number
+      highlightStart: number
+      highlightRolloff: number
+      whitePoint: number
+      median: number
+    }
+    timings?: {
+      totalMs: number
+    }
   }
+}
+
+type ImageLike = {
+  width: number
+  height: number
+  data: Uint8ClampedArray
 }
 
 const REC709_R = 0.2126
 const REC709_G = 0.7152
 const REC709_B = 0.0722
-const BASE_HIGHLIGHT_WEIGHT = 0.45
-const BASE_WHITE_WEIGHT = 0.35
+const HISTOGRAM_BINS = 1024
+const LOG_OFFSET = 1 / 64
+const LUMA_EPSILON = 1e-6
 
 export function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value))
@@ -57,153 +98,344 @@ function linearToSrgbByte(value: number) {
   return Math.round(clamp(encoded) * 255)
 }
 
-function rec709EncodeByte(value: number) {
-  const v = clamp(value)
-  const encoded = v < 0.018 ? 4.5 * v : 1.099 * Math.pow(v, 0.45) - 0.099
-  return Math.round(clamp(encoded) * 255)
-}
-
-function luminanceFromRgba(data: Uint8ClampedArray, index: number) {
-  const r = srgbToLinear(data[index])
-  const g = srgbToLinear(data[index + 1])
-  const b = srgbToLinear(data[index + 2])
-  return REC709_R * r + REC709_G * g + REC709_B * b
-}
-
-function saturationProxy(r: number, g: number, b: number, luma: number) {
-  const maxChannel = Math.max(r, g, b)
-  const minChannel = Math.min(r, g, b)
-  return luma <= 1e-6 ? 0 : (maxChannel - minChannel) / Math.max(maxChannel, 1e-6)
+function linearGrayByte(value: number) {
+  return Math.round(clamp(value) * 255)
 }
 
 function mix(a: number, b: number, t: number) {
   return a + (b - a) * clamp(t)
 }
 
-export function generateBypassGainMap(image: RgbaImage, options: BypassOptions): GainMapResult {
-  const width = Math.max(1, Math.floor(image.width))
-  const height = Math.max(1, Math.floor(image.height))
-  const base = new Uint8ClampedArray(image.data)
-  const fullGainLinear = new Float32Array(width * height)
-  const hdrPreview = new Uint8ClampedArray(width * height * 4)
-  let maxLuminance = 0
-  let activePixels = 0
-  let gainSum = 0
+function imageWidthHeight(image: ImageLike) {
+  return {
+    width: Math.max(1, Math.floor(image.width)),
+    height: Math.max(1, Math.floor(image.height)),
+  }
+}
 
-  const headroom = clamp(options.headroom, 1.05, 8)
-  const strength = clamp(options.strength, 0, 1)
-  const exposureGain = Math.pow(2, clamp(options.exposure, -2, 2))
-  const glow = clamp(options.glow, 0, 1)
-  const highlightStart = clamp(options.highlightStart - glow * 0.04, 0.02, 0.98)
-  const highlightEnd = Math.max(highlightStart + 0.01, clamp(options.highlightEnd, 0.03, 1))
-  const highlights = clamp(options.highlights, -1, 1)
-  const whites = clamp(options.whites, -1, 1)
-  const shadows = clamp(options.shadows, -1, 1)
-  const blacks = clamp(options.blacks, -1, 1)
-  const highlightWeight = clamp(
-    BASE_HIGHLIGHT_WEIGHT +
-      highlights * (highlights >= 0 ? 1 - BASE_HIGHLIGHT_WEIGHT : BASE_HIGHLIGHT_WEIGHT),
-  )
-  const whiteWeight = clamp(
-    BASE_WHITE_WEIGHT + whites * (whites >= 0 ? 1 - BASE_WHITE_WEIGHT : BASE_WHITE_WEIGHT),
-  )
-  const shadowLiftWeight = Math.max(0, shadows) * 0.28
-  const blackLiftWeight = Math.max(0, blacks) * 0.18
-  const shadowProtect = clamp(options.shadowProtect, 0, 1)
-  const saturationProtect = clamp(options.saturationProtect, 0, 1)
-  const skinProtect = clamp(options.skinProtect, 0, 1)
-  const headroomStops = Math.log2(headroom)
+function luminanceFromLinear(r: number, g: number, b: number) {
+  return REC709_R * r + REC709_G * g + REC709_B * b
+}
 
-  for (let pixel = 0, i = 0; pixel < width * height; pixel++, i += 4) {
+function saturationFromLinear(r: number, g: number, b: number) {
+  const maxChannel = Math.max(r, g, b)
+  const minChannel = Math.min(r, g, b)
+  return maxChannel <= LUMA_EPSILON ? 0 : (maxChannel - minChannel) / Math.max(maxChannel, LUMA_EPSILON)
+}
+
+function buildGrayImage(width: number, height: number, values: Float32Array, scale = 1) {
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let pixel = 0, i = 0; pixel < values.length; pixel++, i += 4) {
+    const gray = linearGrayByte(values[pixel] * scale)
+    data[i] = gray
+    data[i + 1] = gray
+    data[i + 2] = gray
+    data[i + 3] = 255
+  }
+  return { width, height, data }
+}
+
+function buildHistogram(values: Float32Array, min: number, max: number) {
+  const histogram = new Uint32Array(HISTOGRAM_BINS)
+  const span = Math.max(max - min, 1e-6)
+  for (let i = 0; i < values.length; i++) {
+    const normalized = clamp((values[i] - min) / span)
+    const bin = Math.min(HISTOGRAM_BINS - 1, Math.floor(normalized * (HISTOGRAM_BINS - 1)))
+    histogram[bin] += 1
+  }
+  return histogram
+}
+
+function histogramPercentile(histogram: Uint32Array, min: number, max: number, percentile: number) {
+  const total = histogram.reduce((sum, value) => sum + value, 0)
+  if (total <= 0) return min
+  const target = clamp(percentile, 0, 1) * (total - 1)
+  let cumulative = 0
+  for (let bin = 0; bin < histogram.length; bin++) {
+    const count = histogram[bin]
+    const next = cumulative + count
+    if (target < next) {
+      const within = count <= 0 ? 0 : (target - cumulative) / count
+      return min + ((bin + within) / histogram.length) * (max - min)
+    }
+    cumulative = next
+  }
+  return max
+}
+
+function percentileFromSorted(values: Float32Array, percentile: number) {
+  if (values.length === 0) return 0
+  const clamped = clamp(percentile, 0, 1)
+  const index = (values.length - 1) * clamped
+  const lower = Math.floor(index)
+  const upper = Math.min(values.length - 1, lower + 1)
+  const mixAmount = index - lower
+  return values[lower] + (values[upper] - values[lower]) * mixAmount
+}
+
+function sortedCopy(values: Float32Array) {
+  const copy = Array.from(values)
+  copy.sort((a, b) => a - b)
+  return Float32Array.from(copy)
+}
+
+function byteMin(values: Uint8Array) {
+  let min = 255
+  for (let i = 0; i < values.length; i++) {
+    min = Math.min(min, values[i])
+  }
+  return values.length ? min : 0
+}
+
+function byteMax(values: Uint8Array) {
+  let max = 0
+  for (let i = 0; i < values.length; i++) {
+    max = Math.max(max, values[i])
+  }
+  return values.length ? max : 0
+}
+
+function byteMean(values: Uint8Array) {
+  if (!values.length) return 0
+  let sum = 0
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i]
+  }
+  return sum / (255 * values.length)
+}
+
+function normalizeLogGain(value: number, min: number, max: number, gamma: number) {
+  if (max <= min + 1e-6) return 0
+  const normalized = clamp((value - min) / (max - min))
+  return Math.pow(normalized, 1 / Math.max(gamma, 1e-6))
+}
+
+export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrGainMapControls): GainMapResult {
+  const started = performance.now()
+  const { width, height } = imageWidthHeight(inputImage)
+  const pixelCount = width * height
+  const base = inputImage.data
+  const normalizedControls = normalizeHdrGainMapControls(controls)
+
+  const linearLuma = new Float32Array(pixelCount)
+  const logLuma = new Float32Array(pixelCount)
+  const saturation = new Float32Array(pixelCount)
+  let logMin = Number.POSITIVE_INFINITY
+  let logMax = Number.NEGATIVE_INFINITY
+  let maxLinearLuma = 0
+
+  for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
     const r = srgbToLinear(base[i])
     const g = srgbToLinear(base[i + 1])
     const b = srgbToLinear(base[i + 2])
-    const luma = REC709_R * r + REC709_G * g + REC709_B * b
-    maxLuminance = Math.max(maxLuminance, luma)
+    const luma = luminanceFromLinear(r, g, b)
+    const logY = Math.log2(Math.max(luma, LOG_OFFSET))
 
-    const exposedLuma = clamp(luma * exposureGain)
-    const highlight = smoothstep(highlightStart, highlightEnd, exposedLuma)
-    const whitePoint = smoothstep(0.86, 0.995, exposedLuma)
-    const shadowLift = smoothstep(0.08, 0.36, exposedLuma) * (1 - smoothstep(0.36, 0.72, exposedLuma))
-    const blackRegion = 1 - smoothstep(0.015, 0.16, exposedLuma)
-    const saturation = saturationProxy(r, g, b, luma)
-    const chromaGuard = 1 - saturationProtect * clamp(saturation * 0.85)
-    const shadowGuard = mix(1 - shadowProtect, 1, smoothstep(0.04, 0.45, exposedLuma))
-    const shadowToneGuard =
-      shadows < 0 ? mix(1 + shadows * 0.8, 1, smoothstep(0.08, 0.42, exposedLuma)) : 1
-    const blackToneGuard =
-      blacks < 0 ? mix(1 + blacks * 0.9, 1, smoothstep(0.015, 0.16, exposedLuma)) : 1
-    const skinGuard = 1 - skinProtect * estimateSkinToneGuard(r, g, b, luma) * 0.45
-    const gain = clamp(
-      strength *
-        (highlight * highlightWeight +
-          whitePoint * whiteWeight * 0.8 +
-          shadowLift * shadowLiftWeight +
-          blackRegion * blackLiftWeight) *
-        chromaGuard *
-        shadowGuard *
-        shadowToneGuard *
-        blackToneGuard *
-        skinGuard,
+    linearLuma[pixel] = luma
+    logLuma[pixel] = logY
+    saturation[pixel] = saturationFromLinear(r, g, b)
+
+    logMin = Math.min(logMin, logY)
+    logMax = Math.max(logMax, logY)
+    maxLinearLuma = Math.max(maxLinearLuma, luma)
+  }
+
+  const logHistogram = buildHistogram(logLuma, logMin, logMax)
+  const thresholdBlack = histogramPercentile(logHistogram, logMin, logMax, clamp(normalizedControls.blackPointGuardPct / 100, 0, 1))
+  const thresholdStart = histogramPercentile(
+    logHistogram,
+    logMin,
+    logMax,
+    clamp(normalizedControls.highlightStartPct / 100, 0, 1),
+  )
+  const thresholdRolloff = histogramPercentile(
+    logHistogram,
+    logMin,
+    logMax,
+    clamp(normalizedControls.highlightRolloffPct / 100, 0, 1),
+  )
+  const thresholdWhite = histogramPercentile(
+    logHistogram,
+    logMin,
+    logMax,
+    clamp(normalizedControls.whitePointGuardPct / 100, 0, 1),
+  )
+  const thresholdMedian = histogramPercentile(logHistogram, logMin, logMax, 0.5)
+  const sortedLinearLuma = sortedCopy(linearLuma)
+
+  const highlightMask = new Float32Array(pixelCount)
+  const shadowMask = new Float32Array(pixelCount)
+  const rawGainStops = new Float32Array(pixelCount)
+  const rawHighlightGain = new Float32Array(pixelCount)
+  const encodedPreview = new Float32Array(pixelCount)
+
+  const fallbackRolloffSpan = Math.max(0.05, (logMax - logMin) * 0.15)
+  const effectiveStart =
+    thresholdRolloff <= thresholdStart + 1e-5 ? thresholdStart - fallbackRolloffSpan : thresholdStart
+  const effectiveRolloff =
+    thresholdRolloff <= effectiveStart + 1e-5 ? effectiveStart + fallbackRolloffSpan : thresholdRolloff
+  const rolloffSpan = Math.max(effectiveRolloff - effectiveStart, 1e-6)
+  const rolloffGamma = clamp(1.55 - rolloffSpan * 3.25, 0.75, 2.3)
+  const midtoneAnchor = mix(0.18, Math.pow(2, thresholdMedian), 0.5)
+  const midtoneWidth = mix(0.55, 1.5, 1 - normalizedControls.midtoneLock * 0.8)
+  const shadowSpan = Math.max(thresholdStart - thresholdBlack, 1e-6)
+  const shadowUpper = thresholdBlack + shadowSpan * 0.85 + 0.2
+  const highlightIntensityGate = smoothstep(0.08, 0.35, maxLinearLuma)
+
+  for (let pixel = 0; pixel < pixelCount; pixel++) {
+    const luma = linearLuma[pixel]
+    const logY = logLuma[pixel]
+
+    const highlightRamp = smoothstep(effectiveStart, effectiveRolloff, logY)
+    const highlightShape = Math.pow(highlightRamp, rolloffGamma)
+    const whiteGuard = 1 - smoothstep(thresholdWhite, effectiveRolloff + rolloffSpan * 0.45 + 1e-6, logY)
+    const highlightMaskValue = clamp(
+      highlightShape * mix(1, whiteGuard, normalizedControls.clipGuard * 0.5) * highlightIntensityGate,
     )
+    highlightMask[pixel] = highlightMaskValue
 
-    fullGainLinear[pixel] = gain
+    const shadowRamp = 1 - smoothstep(thresholdBlack, shadowUpper, logY)
+    shadowMask[pixel] = clamp(shadowRamp)
+
+    const highlightStops = normalizedControls.hdrStrengthStops * highlightMaskValue
+    const shadowStops = normalizedControls.shadowLift * shadowMask[pixel] * (1 - highlightMaskValue * 0.7)
+    const rawStops = highlightStops + shadowStops * 0.42
+    const midSuppress = Math.exp(-Math.pow(Math.log2(Math.max(luma, LOG_OFFSET) / Math.max(midtoneAnchor, LOG_OFFSET)) / midtoneWidth, 2))
+    const lockedStops = rawStops * (1 - normalizedControls.midtoneLock * midSuppress * 0.75)
+
+    rawHighlightGain[pixel] = highlightStops
+    rawGainStops[pixel] = lockedStops
   }
 
-  const finalGainLinear = diffuseGainMap(
-    fullGainLinear,
-    width,
-    height,
-    Math.round(clamp(options.edgeSmoothRadius, 0, 80)),
-    glow,
-  )
+  const smoothSource = normalizedControls.edgeAwareRadius > 0
+    ? guidedFilter(linearLuma, highlightMask, width, height, normalizedControls.edgeAwareRadius, normalizedControls.edgeAwareEps)
+    : highlightMask
+  const detailMix = clamp(normalizedControls.detail / 0.5, 0, 1)
+  const detailMask = new Float32Array(pixelCount)
+  for (let pixel = 0; pixel < pixelCount; pixel++) {
+    detailMask[pixel] = clamp(mix(smoothSource[pixel], highlightMask[pixel], detailMix))
+  }
 
-  const gainMap = downsampleGainMap(finalGainLinear, width, height, {
-    mode: options.gainMapResolutionMode,
-    smallHighlightPreserve: options.smallHighlightPreserve,
-    customWidth: options.customGainMapWidth,
-    customHeight: options.customGainMapHeight,
-  })
-  const gainPreviewData = new Uint8ClampedArray(width * height * 4)
+  const gainStops = new Float32Array(pixelCount)
+  const gainLogValues = new Float32Array(pixelCount)
+  let gainLogMin = Number.POSITIVE_INFINITY
+  let gainLogMax = Number.NEGATIVE_INFINITY
+  let gainLogSum = 0
+  let activePixels = 0
 
-  for (let pixel = 0, i = 0; pixel < width * height; pixel++, i += 4) {
-    const gain = finalGainLinear[pixel]
-    const encoded = rec709EncodeByte(gain)
-    const boost = 1 + gain * (headroom - 1)
+  for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
+    const luma = linearLuma[pixel]
     const r = srgbToLinear(base[i])
     const g = srgbToLinear(base[i + 1])
     const b = srgbToLinear(base[i + 2])
-    if (gain > 0.01) activePixels += 1
-    gainSum += gain
-    gainPreviewData[i] = encoded
-    gainPreviewData[i + 1] = encoded
-    gainPreviewData[i + 2] = encoded
-    gainPreviewData[i + 3] = 255
-    hdrPreview[i] = linearToSrgbByte(r * boost)
-    hdrPreview[i + 1] = linearToSrgbByte(g * boost)
-    hdrPreview[i + 2] = linearToSrgbByte(b * boost)
-    hdrPreview[i + 3] = base[i + 3]
+    const maxChannel = Math.max(r, g, b)
+    const detailWeighted = mix(rawGainStops[pixel], rawHighlightGain[pixel], detailMix)
+    let gainStop = Math.max(0, detailWeighted)
+
+    const ceilingStops = normalizedControls.headroomStops
+    const peakStops = Math.log2(Math.max(maxChannel, LUMA_EPSILON)) + gainStop
+    if (peakStops > ceilingStops) {
+      const excess = peakStops - ceilingStops
+      const knee = 0.18 + (1 - normalizedControls.clipGuard) * 0.55
+      const soft = smoothstep(0, knee, excess)
+      gainStop = Math.max(0, gainStop - excess * soft * normalizedControls.clipGuard)
+    }
+
+    const saturationDamp = mix(1.0, 1.0 - saturation[pixel] * 0.75, normalizedControls.colorProtect)
+    gainStop = Math.max(0, gainStop * saturationDamp)
+
+    const shadowPreviewLift = shadowMask[pixel] * normalizedControls.shadowLift * 0.22
+    const previewStops = gainStop + shadowPreviewLift * (1 - detailMask[pixel] * 0.5)
+    const hdrLin = Math.max(0, Math.pow(2, previewStops) * luma)
+    const gainLog2 = Math.log2((hdrLin + LOG_OFFSET) / (luma + LOG_OFFSET))
+
+    gainStops[pixel] = previewStops
+    gainLogValues[pixel] = gainLog2
+    gainLogMin = Math.min(gainLogMin, gainLog2)
+    gainLogMax = Math.max(gainLogMax, gainLog2)
+    gainLogSum += gainLog2
+    if (previewStops > 0.015) activePixels += 1
   }
+
+  const gainHistogram = buildHistogram(gainLogValues, gainLogMin, gainLogMax)
+  const encodedMin = histogramPercentile(gainHistogram, gainLogMin, gainLogMax, 0.001)
+  const encodedMax = histogramPercentile(gainHistogram, gainLogMin, gainLogMax, 0.999)
+
+  for (let pixel = 0; pixel < pixelCount; pixel++) {
+    encodedPreview[pixel] = normalizeLogGain(gainLogValues[pixel], encodedMin, encodedMax, normalizedControls.gainMapGamma)
+  }
+
+  const gainMap = downsampleGainMap(encodedPreview, width, height, {
+    mode: normalizedControls.gainMapResolutionMode,
+    customWidth: normalizedControls.customGainMapWidth,
+    customHeight: normalizedControls.customGainMapHeight,
+  })
+
+  const gainPreview = buildGrayImage(width, height, encodedPreview)
+  const highlightPreview = buildGrayImage(width, height, highlightMask)
+  const hdrPreviewData = new Uint8ClampedArray(pixelCount * 4)
+
+  for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
+    const r = srgbToLinear(base[i])
+    const g = srgbToLinear(base[i + 1])
+    const b = srgbToLinear(base[i + 2])
+    const boost = Math.pow(2, gainStops[pixel])
+    hdrPreviewData[i] = linearToSrgbByte(r * boost)
+    hdrPreviewData[i + 1] = linearToSrgbByte(g * boost)
+    hdrPreviewData[i + 2] = linearToSrgbByte(b * boost)
+    hdrPreviewData[i + 3] = base[i + 3]
+  }
+
+  const totalMs = Math.round((performance.now() - started) * 10) / 10
 
   return {
     base: { width, height, data: base },
     gainMap,
-    gainMapPreview: { width, height, data: gainPreviewData },
-    hdrPreview: { width, height, data: hdrPreview },
+    gainMapPreview: gainPreview,
+    highlightMaskPreview: highlightPreview,
+    hdrPreview: { width, height, data: hdrPreviewData },
     stats: {
-      maxLuminance,
-      meanGain: gainSum / Math.max(width * height, 1),
+      luminance: {
+        p50: percentileFromSorted(sortedLinearLuma, 0.5),
+        p90: percentileFromSorted(sortedLinearLuma, 0.9),
+        p95: percentileFromSorted(sortedLinearLuma, 0.95),
+        p99: percentileFromSorted(sortedLinearLuma, 0.99),
+        p99_9: percentileFromSorted(sortedLinearLuma, 0.999),
+      },
+      gain: {
+        min: gainLogMin,
+        max: gainLogMax,
+        mean: gainLogSum / Math.max(pixelCount, 1),
+        encodedMin: byteMin(gainMap.data),
+        encodedMax: byteMax(gainMap.data),
+        encodedMean: byteMean(gainMap.data),
+      },
       activePixels,
-      headroomStops,
+      headroomStops: normalizedControls.headroomStops,
+      gainMapGamma: normalizedControls.gainMapGamma,
+      thresholds: {
+        blackPoint: thresholdBlack,
+        highlightStart: effectiveStart,
+        highlightRolloff: effectiveRolloff,
+        whitePoint: thresholdWhite,
+        median: thresholdMedian,
+      },
+      timings: {
+        totalMs,
+      },
     },
   }
 }
 
+export function generateBypassGainMap(image: ImageLike, options: BypassOptions) {
+  return generateSyntheticGainMapV2(image, options)
+}
+
 type DownsampleOptions = {
   mode?: GainMapResolutionMode
-  smallHighlightPreserve?: number
   customWidth?: number
   customHeight?: number
+  smallHighlightPreserve?: number
 }
 
 export function resolveGainMapSize(
@@ -255,8 +487,8 @@ export function downsampleGainMap(
     options.customWidth,
     options.customHeight,
   )
+  const preserve = clamp(options.smallHighlightPreserve ?? 0.35)
   const data = new Uint8Array(gainWidth * gainHeight)
-  const preserve = clamp(options.smallHighlightPreserve ?? 0)
 
   for (let y = 0; y < gainHeight; y++) {
     for (let x = 0; x < gainWidth; x++) {
@@ -278,7 +510,7 @@ export function downsampleGainMap(
       const avgGain = sum / Math.max(samples, 1)
       const sparse = smoothstep(0.05, 0.35, maxGain - avgGain)
       const finalGain = mix(avgGain, maxGain, sparse * preserve)
-      data[y * gainWidth + x] = rec709EncodeByte(finalGain)
+      data[y * gainWidth + x] = linearGrayByte(finalGain)
     }
   }
 
@@ -286,18 +518,18 @@ export function downsampleGainMap(
 }
 
 export function authorBasePlusGainMap(
-  baseImage: RgbaImage,
-  gainMapImage: RgbaImage,
+  baseImage: ImageLike,
+  gainMapImage: ImageLike,
   options: BypassOptions,
 ): GainMapResult {
-  const width = Math.max(1, Math.floor(baseImage.width))
-  const height = Math.max(1, Math.floor(baseImage.height))
-  const base = new Uint8ClampedArray(baseImage.data)
+  const { width, height } = imageWidthHeight(baseImage)
+  const base = baseImage.data
+  const normalizedControls = normalizeHdrGainMapControls(options)
+  const headroomRatio = Math.pow(2, normalizedControls.headroomStops)
   const encodedFull = new Float32Array(width * height)
   const gainPreviewData = new Uint8ClampedArray(width * height * 4)
   const hdrPreview = new Uint8ClampedArray(width * height * 4)
-  const headroom = clamp(options.headroom, 1.05, 8)
-  const headroomStops = Math.log2(headroom)
+  const linearLuma = new Float32Array(width * height)
   let activePixels = 0
   let gainSum = 0
   let maxLuminance = 0
@@ -306,12 +538,12 @@ export function authorBasePlusGainMap(
     const x = pixel % width
     const y = Math.floor(pixel / width)
     const encoded = sampleEncodedGain(gainMapImage, x / width, y / height)
-    const gain = encodedGainToMultiplier(encoded, headroom)
-    encodedFull[pixel] = encoded
+    const gain = encodedGainToMultiplier(encoded, headroomRatio)
+    encodedFull[pixel] = clamp(encoded)
     if (encoded > 0.01) activePixels += 1
     gainSum += encoded
 
-    const gray = rec709EncodeByte(encoded)
+    const gray = linearGrayByte(encoded)
     gainPreviewData[i] = gray
     gainPreviewData[i + 1] = gray
     gainPreviewData[i + 2] = gray
@@ -320,30 +552,55 @@ export function authorBasePlusGainMap(
     const r = srgbToLinear(base[i])
     const g = srgbToLinear(base[i + 1])
     const b = srgbToLinear(base[i + 2])
-    maxLuminance = Math.max(maxLuminance, REC709_R * r + REC709_G * g + REC709_B * b)
+    const luma = luminanceFromLinear(r, g, b)
+    linearLuma[pixel] = luma
+    maxLuminance = Math.max(maxLuminance, luma)
     hdrPreview[i] = linearToSrgbByte(r * gain)
     hdrPreview[i + 1] = linearToSrgbByte(g * gain)
     hdrPreview[i + 2] = linearToSrgbByte(b * gain)
     hdrPreview[i + 3] = base[i + 3]
   }
+  const sortedLinearLuma = sortedCopy(linearLuma)
 
   const gainMap = downsampleGainMap(encodedFull, width, height, {
-    mode: options.gainMapResolutionMode,
-    smallHighlightPreserve: options.smallHighlightPreserve,
-    customWidth: options.customGainMapWidth,
-    customHeight: options.customGainMapHeight,
+    mode: normalizedControls.gainMapResolutionMode,
+    smallHighlightPreserve: 0.35,
+    customWidth: normalizedControls.customGainMapWidth,
+    customHeight: normalizedControls.customGainMapHeight,
   })
 
   return {
     base: { width, height, data: base },
     gainMap,
     gainMapPreview: { width, height, data: gainPreviewData },
+    highlightMaskPreview: { width, height, data: gainPreviewData },
     hdrPreview: { width, height, data: hdrPreview },
     stats: {
-      maxLuminance,
-      meanGain: gainSum / Math.max(width * height, 1),
+      luminance: {
+        p50: percentileFromSorted(sortedLinearLuma, 0.5),
+        p90: percentileFromSorted(sortedLinearLuma, 0.9),
+        p95: percentileFromSorted(sortedLinearLuma, 0.95),
+        p99: percentileFromSorted(sortedLinearLuma, 0.99),
+        p99_9: percentileFromSorted(sortedLinearLuma, 0.999),
+      },
+      gain: {
+        min: 0,
+        max: 1,
+        mean: gainSum / Math.max(width * height, 1),
+        encodedMin: byteMin(gainMap.data),
+        encodedMax: byteMax(gainMap.data),
+        encodedMean: byteMean(gainMap.data),
+      },
       activePixels,
-      headroomStops,
+      headroomStops: normalizedControls.headroomStops,
+      gainMapGamma: normalizedControls.gainMapGamma,
+      thresholds: {
+        blackPoint: 0,
+        highlightStart: 0,
+        highlightRolloff: 0,
+        whitePoint: 0,
+        median: 0,
+      },
     },
   }
 }
@@ -356,15 +613,62 @@ export function gainMultiplierToEncoded(gain: number, maxHeadroom: number) {
   return clamp(Math.log2(Math.max(gain, 1)) / Math.log2(Math.max(maxHeadroom, 1.05)))
 }
 
-function diffuseGainMap(source: Float32Array, width: number, height: number, radius: number, amount: number) {
-  const clampedAmount = clamp(amount)
-  const clampedRadius = Math.max(0, Math.floor(radius))
-  if (clampedAmount <= 0 || clampedRadius <= 0) return source
+function sampleEncodedGain(image: ImageLike, normalizedX: number, normalizedY: number) {
+  const x = Math.min(image.width - 1, Math.max(0, Math.floor(normalizedX * image.width)))
+  const y = Math.min(image.height - 1, Math.max(0, Math.floor(normalizedY * image.height)))
+  const index = (y * image.width + x) * 4
+  return clamp(
+    (REC709_R * image.data[index] + REC709_G * image.data[index + 1] + REC709_B * image.data[index + 2]) / 255,
+  )
+}
 
+function guidedFilter(
+  guide: Float32Array,
+  source: Float32Array,
+  width: number,
+  height: number,
+  radius: number,
+  eps: number,
+) {
+  const r = Math.max(0, Math.floor(radius))
+  if (r <= 0) return source
+
+  const meanI = boxFilterMean(guide, width, height, r)
+  const meanP = boxFilterMean(source, width, height, r)
+
+  const guideSq = new Float32Array(guide.length)
+  const guideSource = new Float32Array(guide.length)
+  for (let i = 0; i < guide.length; i++) {
+    guideSq[i] = guide[i] * guide[i]
+    guideSource[i] = guide[i] * source[i]
+  }
+
+  const corrI = boxFilterMean(guideSq, width, height, r)
+  const corrIp = boxFilterMean(guideSource, width, height, r)
+  const a = new Float32Array(source.length)
+  const b = new Float32Array(source.length)
+
+  for (let i = 0; i < source.length; i++) {
+    const variance = Math.max(0, corrI[i] - meanI[i] * meanI[i])
+    const covariance = corrIp[i] - meanI[i] * meanP[i]
+    a[i] = covariance / (variance + eps)
+    b[i] = meanP[i] - a[i] * meanI[i]
+  }
+
+  const meanA = boxFilterMean(a, width, height, r)
+  const meanB = boxFilterMean(b, width, height, r)
+  const output = new Float32Array(source.length)
+  for (let i = 0; i < source.length; i++) {
+    output[i] = clamp(meanA[i] * guide[i] + meanB[i])
+  }
+  return output
+}
+
+function boxFilterMean(source: Float32Array, width: number, height: number, radius: number) {
   const horizontal = new Float32Array(source.length)
-  const blurred = new Float32Array(source.length)
+  const output = new Float32Array(source.length)
   const rowPrefix = new Float32Array(width + 1)
-  const columnPrefix = new Float32Array(height + 1)
+  const colPrefix = new Float32Array(height + 1)
 
   for (let y = 0; y < height; y++) {
     rowPrefix[0] = 0
@@ -373,37 +677,25 @@ function diffuseGainMap(source: Float32Array, width: number, height: number, rad
       rowPrefix[x + 1] = rowPrefix[x] + source[rowOffset + x]
     }
     for (let x = 0; x < width; x++) {
-      const start = Math.max(0, x - clampedRadius)
-      const end = Math.min(width, x + clampedRadius + 1)
+      const start = Math.max(0, x - radius)
+      const end = Math.min(width, x + radius + 1)
       horizontal[rowOffset + x] = (rowPrefix[end] - rowPrefix[start]) / Math.max(end - start, 1)
     }
   }
 
   for (let x = 0; x < width; x++) {
-    columnPrefix[0] = 0
+    colPrefix[0] = 0
     for (let y = 0; y < height; y++) {
-      columnPrefix[y + 1] = columnPrefix[y] + horizontal[y * width + x]
+      colPrefix[y + 1] = colPrefix[y] + horizontal[y * width + x]
     }
     for (let y = 0; y < height; y++) {
-      const start = Math.max(0, y - clampedRadius)
-      const end = Math.min(height, y + clampedRadius + 1)
-      blurred[y * width + x] = (columnPrefix[end] - columnPrefix[start]) / Math.max(end - start, 1)
+      const start = Math.max(0, y - radius)
+      const end = Math.min(height, y + radius + 1)
+      output[y * width + x] = (colPrefix[end] - colPrefix[start]) / Math.max(end - start, 1)
     }
   }
 
-  const result = new Float32Array(source.length)
-  for (let i = 0; i < source.length; i++) {
-    result[i] = clamp(Math.max(source[i], mix(source[i], blurred[i], clampedAmount)))
-  }
-  return result
-}
-
-function estimateSkinToneGuard(r: number, g: number, b: number, luma: number) {
-  if (luma < 0.08 || luma > 0.86) return 0
-  const warm = smoothstep(0.02, 0.18, r - b)
-  const redAboveGreen = 1 - smoothstep(0.02, 0.22, Math.abs(r - g))
-  const blueBelowGreen = smoothstep(0.0, 0.16, g - b)
-  return clamp(warm * redAboveGreen * blueBelowGreen)
+  return output
 }
 
 function scaleByRatio(width: number, height: number, ratio: number) {
@@ -428,15 +720,6 @@ function clampSize(sourceWidth: number, sourceHeight: number, width: number, hei
   }
 }
 
-function sampleEncodedGain(image: RgbaImage, normalizedX: number, normalizedY: number) {
-  const x = Math.min(image.width - 1, Math.max(0, Math.floor(normalizedX * image.width)))
-  const y = Math.min(image.height - 1, Math.max(0, Math.floor(normalizedY * image.height)))
-  const index = (y * image.width + x) * 4
-  return clamp(
-    (REC709_R * image.data[index] + REC709_G * image.data[index + 1] + REC709_B * image.data[index + 2]) / 255,
-  )
-}
-
 export function getAppleMakerNote48(headroom: number) {
   const stops = Math.log2(clamp(headroom, 1.05, 8))
   if (stops >= 2.3) return (3.0 - stops) / 70.0
@@ -450,7 +733,10 @@ export function detectUsefulGain(image: RgbaImage) {
   let sum = 0
   const pixels = image.width * image.height
   for (let pixel = 0, i = 0; pixel < pixels; pixel++, i += 4) {
-    const luma = luminanceFromRgba(image.data, i)
+    const r = srgbToLinear(image.data[i])
+    const g = srgbToLinear(image.data[i + 1])
+    const b = srgbToLinear(image.data[i + 2])
+    const luma = luminanceFromLinear(r, g, b)
     max = Math.max(max, luma)
     sum += luma
   }

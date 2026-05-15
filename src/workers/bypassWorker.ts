@@ -49,6 +49,7 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           result.base.data.buffer as ArrayBuffer,
           result.gainMap.data.buffer as ArrayBuffer,
           result.gainMapPreview.data.buffer as ArrayBuffer,
+          result.highlightMaskPreview.data.buffer as ArrayBuffer,
           result.hdrPreview.data.buffer as ArrayBuffer,
         ] satisfies Transferable[],
       )
@@ -74,6 +75,7 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         result.base.data.buffer as ArrayBuffer,
         result.gainMap.data.buffer as ArrayBuffer,
         result.gainMapPreview.data.buffer as ArrayBuffer,
+        result.highlightMaskPreview.data.buffer as ArrayBuffer,
         result.hdrPreview.data.buffer as ArrayBuffer,
         encoded.bytes.buffer as ArrayBuffer,
       ] satisfies Transferable[],
