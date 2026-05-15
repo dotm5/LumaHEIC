@@ -7,6 +7,8 @@
 [![Deploy GitHub Pages](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml/badge.svg)](https://github.com/dotm5/hdr-heic-bypass/actions/workflows/pages.yml)
 [![License: GPL v2 or later](https://img.shields.io/badge/License-GPL_v2_or_later-blue.svg)](LICENSE)
 
+**Language:** English | [简体中文](README_CN.md)
+
 LumaHEIC is a browser-only Apple HDR gain-map HEIC exporter for turning a single JPEG or PNG into a Photos-friendly HEIC with an Apple HDR gain-map auxiliary image.
 
 The app is designed for static hosting. GitHub Pages serves only HTML, CSS, JavaScript, and WASM files. Images are never uploaded to any server: decoding, gain-map generation, preview rendering, and HEIC encoding all run locally in the user's browser, inside a Web Worker and the `libheif + x265` WASM encoder.
