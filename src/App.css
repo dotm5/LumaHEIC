@@ -72,7 +72,6 @@
   background: var(--surface-muted);
 }
 
-.repo-link,
 .download-action,
 .mini-action,
 .primary-action {
@@ -97,6 +96,26 @@
   grid-template-columns: minmax(280px, 360px) 1fr;
   min-height: 0;
   flex: 1;
+}
+
+.app-footer {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  font-size: 12px;
+}
+
+.app-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-footer a:hover {
+  color: var(--muted);
+  text-decoration: underline;
 }
 
 .control-panel {

@@ -9,7 +9,7 @@ export const translations = {
   en: {
     appEyebrow: 'Browser-only Apple HDR gain-map HEIC',
     appTitle: 'LumaHEIC',
-    swiftReference: 'Swift reference',
+    conceptReferencePrefix: 'Conceptual reference:',
     inputMode: 'Input mode',
     singleImageEnhance: 'Single Image Enhance',
     basePlusGainMap: 'Base + Gain Map',
@@ -88,7 +88,7 @@ export const translations = {
   zh: {
     appEyebrow: '浏览器本地 Apple HDR 增益图 HEIC',
     appTitle: 'LumaHEIC',
-    swiftReference: 'Swift 参考实现',
+    conceptReferencePrefix: '思路参考：',
     inputMode: '输入模式',
     singleImageEnhance: '单图增强',
     basePlusGainMap: '基图 + 增益图',

@@ -299,9 +299,6 @@ function App() {
               </button>
             ))}
           </div>
-          <a className="repo-link" href="https://github.com/chemharuka/toGainMapHDR" target="_blank">
-            {t.swiftReference}
-          </a>
         </div>
       </header>
 
@@ -619,6 +616,13 @@ function App() {
           {output && <p className="output-note">{translateOutputLabel(output.label, t)}</p>}
         </section>
       </section>
+
+      <footer className="app-footer">
+        <span>{t.conceptReferencePrefix}</span>
+        <a href="https://github.com/chemharuka/toGainMapHDR" target="_blank">
+          toGainMapHDR
+        </a>
+      </footer>
     </main>
   )
 }
