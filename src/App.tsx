@@ -9,6 +9,14 @@ import {
   type GainMapResult,
   type RgbaImage,
 } from './lib/gainMap'
+import {
+  getInitialLanguage,
+  languageLabels,
+  saveLanguage,
+  translations,
+  type Language,
+  type TranslationKey,
+} from './lib/i18n'
 import { decodeImageFile, imageToPngUrl } from './lib/imageIo'
 
 type PreviewState = {
@@ -25,6 +33,10 @@ type OutputState = {
 }
 
 type EncoderCheckState = 'checking' | 'ready' | 'missing'
+type StatusState = {
+  key: TranslationKey
+  fallback?: string
+}
 
 const worker = new Worker(new URL('./workers/bypassWorker.ts', import.meta.url), {
   type: 'module',
@@ -41,6 +53,7 @@ const extremeGainMapOptions: BypassOptions = {
 }
 
 function App() {
+  const [language, setLanguage] = React.useState<Language>(() => getInitialLanguage())
   const [sourceName, setSourceName] = React.useState('')
   const [sourceImage, setSourceImage] = React.useState<RgbaImage | null>(null)
   const [options, setOptions] = React.useState<BypassOptions>(defaultBypassOptions)
@@ -49,12 +62,18 @@ function App() {
   const [preview, setPreview] = React.useState<PreviewState | null>(null)
   const [result, setResult] = React.useState<GainMapResult | null>(null)
   const [output, setOutput] = React.useState<OutputState | null>(null)
-  const [status, setStatus] = React.useState('Drop or choose a JPEG/PNG to begin')
+  const [status, setStatus] = React.useState<StatusState>({ key: 'statusDrop' })
   const [encoderCheck, setEncoderCheck] = React.useState<EncoderCheckState>('checking')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
   const encoderReady = encoderCheck === 'ready'
+  const t = translations[language]
+
+  React.useEffect(() => {
+    document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
+    saveLanguage(language)
+  }, [language])
 
   React.useEffect(() => {
     return () => revokePreview(preview)
@@ -84,13 +103,13 @@ function App() {
     worker.onmessage = (event: MessageEvent) => {
       const { type, message, result: workerResult, encoded } = event.data
       if (type === 'progress') {
-        setStatus(message)
+        setStatus(translateWorkerProgress(message))
         return
       }
       if (type === 'error') {
         setBusy(false)
         setError(message)
-        setStatus('Processing failed')
+        setStatus({ key: 'statusProcessingFailed' })
         return
       }
       if (type === 'processed' || type === 'encoded') {
@@ -118,9 +137,9 @@ function App() {
               kind: encodedResult.kind,
             }
           })
-          setStatus(encodedResult.message)
+          setStatus(translateEncoderMessage(encodedResult.message))
         } else {
-          setStatus('Preview updated')
+          setStatus({ key: 'statusPreviewUpdated' })
         }
         setBusy(false)
       }
@@ -141,19 +160,19 @@ function App() {
       return null
     })
     try {
-      setStatus('Decoding source image')
+      setStatus({ key: 'statusDecodingSource' })
       const decoded = await decodeImageFile(file)
       const signal = detectUsefulGain(decoded)
       setSourceName(file.name)
       setSourceImage(decoded)
       setStatus(
         signal.isLowDynamicRange
-          ? 'Image decoded. Low luminance detected; use a stronger headroom if needed.'
-          : 'Image decoded. Building bypass preview.',
+          ? { key: 'statusImageDecodedLowLuminance' }
+          : { key: 'statusImageDecodedPreview' },
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setStatus('Could not load image')
+      setStatus({ key: 'statusCouldNotLoadImage' })
       setBusy(false)
     }
   }
@@ -161,8 +180,8 @@ function App() {
   const processImage = React.useCallback((encode: boolean) => {
     if (!sourceImage) return
     if (encode && !encoderReady) {
-      setError('Browser HEIC encoder is not available')
-      setStatus('Export unavailable')
+      setError(t.errorBrowserEncoderUnavailable)
+      setStatus({ key: 'statusExportUnavailable' })
       return
     }
     setBusy(true)
@@ -191,7 +210,7 @@ function App() {
       },
       [requestImage.data.buffer as ArrayBuffer],
     )
-  }, [encoderReady, options, quality, sourceImage, sourceName])
+  }, [encoderReady, options, quality, sourceImage, sourceName, t.errorBrowserEncoderUnavailable])
 
   React.useEffect(() => {
     if (!sourceImage) return
@@ -210,19 +229,33 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Single-image bypass</p>
-          <h1>HDR HEIC Gain Map Lab</h1>
+          <p className="eyebrow">{t.appEyebrow}</p>
+          <h1>{t.appTitle}</h1>
         </div>
-        <a className="repo-link" href="https://github.com/chemharuka/toGainMapHDR" target="_blank">
-          Swift reference
-        </a>
+        <div className="topbar-actions">
+          <div className="language-switch" aria-label="Language">
+            {(['en', 'zh'] satisfies Language[]).map((nextLanguage) => (
+              <button
+                key={nextLanguage}
+                className={language === nextLanguage ? 'active' : undefined}
+                type="button"
+                onClick={() => setLanguage(nextLanguage)}
+              >
+                {languageLabels[nextLanguage]}
+              </button>
+            ))}
+          </div>
+          <a className="repo-link" href="https://github.com/chemharuka/toGainMapHDR" target="_blank">
+            {t.swiftReference}
+          </a>
+        </div>
       </header>
 
       <section className="workspace">
         <aside className="control-panel">
           <label className="drop-zone" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
             <ImageUp aria-hidden="true" />
-            <span>{sourceName || 'Choose JPEG/PNG'}</span>
+            <span>{sourceName || t.chooseImage}</span>
             <input
               type="file"
               accept="image/jpeg,image/png,.jpg,.jpeg,.png"
@@ -231,18 +264,18 @@ function App() {
           </label>
 
           <p className={encoderReady ? 'encoder-status ready' : 'encoder-status'}>
-            {encoderCheck === 'checking' && 'Checking local HEIC encoder files...'}
-            {encoderCheck === 'ready' && 'HEIC encoder ready. All processing runs locally in your browser.'}
-            {encoderCheck === 'missing' && 'HEIC encoder files are missing. Export is unavailable.'}
+            {encoderCheck === 'checking' && t.encoderChecking}
+            {encoderCheck === 'ready' && t.encoderReady}
+            {encoderCheck === 'missing' && t.encoderMissing}
           </p>
 
           <div className="panel-heading">
             <SlidersHorizontal aria-hidden="true" />
-            <h2>Bypass Controls</h2>
+            <h2>{t.controlsHeading}</h2>
           </div>
 
           <Slider
-            label="HDR strength"
+            label={t.hdrStrength}
             value={options.intensity}
             min={0}
             max={1}
@@ -251,7 +284,7 @@ function App() {
             onChange={(intensity) => setOptions((state) => ({ ...state, intensity }))}
           />
           <Slider
-            label="Highlight threshold"
+            label={t.highlightThreshold}
             value={options.threshold}
             min={0.05}
             max={0.95}
@@ -260,7 +293,7 @@ function App() {
             onChange={(threshold) => setOptions((state) => ({ ...state, threshold }))}
           />
           <Slider
-            label="Transition softness"
+            label={t.transitionSoftness}
             value={options.softness}
             min={0.02}
             max={0.8}
@@ -269,7 +302,7 @@ function App() {
             onChange={(softness) => setOptions((state) => ({ ...state, softness }))}
           />
           <Slider
-            label="Peak headroom"
+            label={t.peakHeadroom}
             value={options.headroom}
             min={1.05}
             max={8}
@@ -278,7 +311,7 @@ function App() {
             onChange={(headroom) => setOptions((state) => ({ ...state, headroom }))}
           />
           <Slider
-            label="Color protection"
+            label={t.colorProtection}
             value={options.colorProtection}
             min={0}
             max={1}
@@ -293,11 +326,11 @@ function App() {
                 checked={extremeGainMap}
                 onChange={(event) => setExtremeDebugMode(event.target.checked)}
               />
-              <span>Extreme gain map debug</span>
+              <span>{t.extremeGainDebug}</span>
             </label>
           )}
           <Slider
-            label="HEIC quality"
+            label={t.heicQuality}
             value={quality}
             min={45}
             max={100}
@@ -308,41 +341,41 @@ function App() {
 
           <button className="primary-action" disabled={!sourceImage || busy || !encoderReady} onClick={() => processImage(true)}>
             {busy ? <Loader2 className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-            Export Apple HDR HEIC
+            {t.exportHeic}
           </button>
 
           {output && (
             <a className="download-action" download={output.fileName} href={output.url}>
               <Download aria-hidden="true" />
-              {output.kind === 'heic' ? 'Download HEIC' : 'Download debug package'}
+              {output.kind === 'heic' ? t.downloadHeic : t.downloadDebugPackage}
             </a>
           )}
 
-          <p className="status-line">{status}</p>
+          <p className="status-line">{status.fallback ?? t[status.key]}</p>
           {error && <p className="error-line">{error}</p>}
         </aside>
 
         <section className="preview-panel">
           <div className="preview-grid">
-            <Preview title="SDR base" url={preview?.baseUrl} />
-            <Preview title="Gain map" url={preview?.gainUrl} />
-            <Preview title="HDR reference" url={preview?.hdrUrl} />
+            <Preview title={t.sdrBase} url={preview?.baseUrl} />
+            <Preview title={t.gainMap} url={preview?.gainUrl} />
+            <Preview title={t.hdrReference} url={preview?.hdrUrl} />
           </div>
 
           <div className="metrics">
-            <Metric label="Canvas" value={result ? `${result.base.width} x ${result.base.height}` : '-'} />
+            <Metric label={t.canvas} value={result ? `${result.base.width} x ${result.base.height}` : '-'} />
             <Metric
-              label="Gain map"
+              label={t.gainMap}
               value={result ? `${result.gainMap.width} x ${result.gainMap.height}` : '-'}
             />
             <Metric
-              label="Active pixels"
+              label={t.activePixels}
               value={result ? `${Math.round((result.stats.activePixels / (result.base.width * result.base.height)) * 100)}%` : '-'}
             />
-            <Metric label="Headroom" value={result ? `${result.stats.headroomStops.toFixed(2)} stops` : '-'} />
+            <Metric label={t.headroom} value={result ? `${result.stats.headroomStops.toFixed(2)} ${t.stops}` : '-'} />
           </div>
 
-          {output && <p className="output-note">{output.label}</p>}
+          {output && <p className="output-note">{translateOutputLabel(output.label, t)}</p>}
         </section>
       </section>
     </main>
@@ -403,6 +436,21 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+function translateWorkerProgress(message: string): StatusState {
+  if (message === 'Generating Apple-style gain map') return { key: 'statusGeneratingGainMap' }
+  if (message === 'Encoding HEIC payload') return { key: 'statusEncodingHeic' }
+  return { key: 'statusProcessingFailed', fallback: message }
+}
+
+function translateEncoderMessage(message: string): StatusState {
+  if (message === translations.en.encodedHeicLocal) return { key: 'encodedHeicLocal' }
+  return { key: 'statusPreviewUpdated', fallback: message }
+}
+
+function translateOutputLabel(label: string, t: typeof translations.en) {
+  return label === translations.en.encodedHeicLocal ? t.encodedHeicLocal : label
 }
 
 async function checkEncoderAsset(fileName: string) {
