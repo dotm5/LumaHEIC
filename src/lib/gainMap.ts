@@ -195,7 +195,7 @@ function buildContrastEdgeMask(values: Float32Array, width: number, height: numb
     mask[i] = smoothstep(low, high, gradient[i])
   }
 
-  const spread = boxFilterMean(mask, width, height, EDGE_SOFTEN_RADIUS)
+  const spread = gaussianBlur(mask, width, height, EDGE_SOFTEN_RADIUS)
   for (let i = 0; i < spread.length; i++) {
     spread[i] = smoothstep(0.02, 0.18, spread[i])
   }
@@ -518,7 +518,7 @@ export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrG
     : coherentHighlightMask
   const detailMix = clamp(normalizedControls.detail / 0.5, 0, 1)
   const contrastEdgeMask = buildContrastEdgeMask(logLuma, width, height)
-  const edgeSoftGain = boxFilterMean(rawGainStops, width, height, EDGE_SOFTEN_RADIUS)
+  const edgeSoftGain = gaussianBlur(rawGainStops, width, height, EDGE_SOFTEN_RADIUS)
   const outputBase = applyNaturalSaturation(source, normalizedControls.naturalSaturation)
   const gainStops = new Float32Array(pixelCount)
   const gainLogValues = new Float32Array(pixelCount)
@@ -890,60 +890,90 @@ function guidedFilter(
   return output
 }
 
-function boxFilterMean(source: Float32Array, width: number, height: number, radius: number) {
+export function boxFilterMean(source: Float32Array, width: number, height: number, radius: number) {
+  const r = Math.max(0, Math.floor(radius))
+  if (r <= 0) return source
+
   const horizontal = new Float32Array(source.length)
   const output = new Float32Array(source.length)
+  const windowSize = r * 2 + 1
 
   for (let y = 0; y < height; y++) {
     const rowOffset = y * width
     let sum = 0
-    let count = 0
-    const initialEnd = Math.min(width - 1, radius)
-    for (let x = 0; x <= initialEnd; x++) {
-      sum += source[rowOffset + x]
-      count += 1
+    for (let dx = -r; dx <= r; dx++) {
+      sum += source[rowOffset + clampIndex(dx, width)]
     }
 
     for (let x = 0; x < width; x++) {
-      horizontal[rowOffset + x] = sum / Math.max(count, 1)
-      const removeX = x - radius
-      if (removeX >= 0) {
-        sum -= source[rowOffset + removeX]
-        count -= 1
-      }
-      const addX = x + radius + 1
-      if (addX < width) {
-        sum += source[rowOffset + addX]
-        count += 1
-      }
+      horizontal[rowOffset + x] = sum / windowSize
+      const removeX = clampIndex(x - r, width)
+      const addX = clampIndex(x + r + 1, width)
+      sum += source[rowOffset + addX] - source[rowOffset + removeX]
     }
   }
 
   for (let x = 0; x < width; x++) {
     let sum = 0
-    let count = 0
-    const initialEnd = Math.min(height - 1, radius)
-    for (let y = 0; y <= initialEnd; y++) {
-      sum += horizontal[y * width + x]
-      count += 1
+    for (let dy = -r; dy <= r; dy++) {
+      sum += horizontal[clampIndex(dy, height) * width + x]
     }
 
     for (let y = 0; y < height; y++) {
-      output[y * width + x] = sum / Math.max(count, 1)
-      const removeY = y - radius
-      if (removeY >= 0) {
-        sum -= horizontal[removeY * width + x]
-        count -= 1
-      }
-      const addY = y + radius + 1
-      if (addY < height) {
-        sum += horizontal[addY * width + x]
-        count += 1
-      }
+      output[y * width + x] = sum / windowSize
+      const removeY = clampIndex(y - r, height)
+      const addY = clampIndex(y + r + 1, height)
+      sum += horizontal[addY * width + x] - horizontal[removeY * width + x]
     }
   }
 
   return output
+}
+
+function gaussianBlur(source: Float32Array, width: number, height: number, radius: number) {
+  const r = Math.max(0, Math.floor(radius))
+  if (r <= 0) return source
+
+  const sigma = Math.max(r / 2, 0.75)
+  const weights = new Float32Array(r * 2 + 1)
+  let weightSum = 0
+  for (let offset = -r; offset <= r; offset++) {
+    const weight = Math.exp(-(offset * offset) / (2 * sigma * sigma))
+    weights[offset + r] = weight
+    weightSum += weight
+  }
+  for (let i = 0; i < weights.length; i++) {
+    weights[i] /= weightSum
+  }
+
+  const horizontal = new Float32Array(source.length)
+  const output = new Float32Array(source.length)
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * width
+    for (let x = 0; x < width; x++) {
+      let sum = 0
+      for (let offset = -r; offset <= r; offset++) {
+        sum += source[rowOffset + clampIndex(x + offset, width)] * weights[offset + r]
+      }
+      horizontal[rowOffset + x] = sum
+    }
+  }
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+      let sum = 0
+      for (let offset = -r; offset <= r; offset++) {
+        sum += horizontal[clampIndex(y + offset, height) * width + x] * weights[offset + r]
+      }
+      output[y * width + x] = sum
+    }
+  }
+  return output
+}
+
+function clampIndex(index: number, size: number) {
+  if (index < 0) return 0
+  if (index >= size) return size - 1
+  return index
 }
 
 function scaleByRatio(width: number, height: number, ratio: number) {

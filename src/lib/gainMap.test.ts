@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultBypassOptions, defaultPresetId, hdrPresets } from './authoring'
 import {
   authorBasePlusGainMap,
+  boxFilterMean,
   detectUsefulGain,
   downsampleGainMap,
   encodedGainToMultiplier,
@@ -336,6 +337,21 @@ describe('synthetic gain-map generation v2', () => {
     expect(result.stats.luminance.p99).toBeLessThanOrEqual(1)
     expect(result.stats.luminance.p50).toBeLessThan(result.stats.luminance.p90)
     expect(result.stats.luminance.p90).toBeLessThan(result.stats.luminance.p99)
+  })
+})
+
+describe('gain-map smoothing', () => {
+  it('uses a fixed-size replicated edge window instead of clipping the border', () => {
+    const source = new Float32Array([
+      0, 1, 2,
+      3, 4, 5,
+      6, 7, 8,
+    ])
+    const result = boxFilterMean(source, 3, 3, 1)
+
+    expect(result[0]).toBeCloseTo(12 / 9)
+    expect(result[1]).toBeCloseTo(18 / 9)
+    expect(result[4]).toBeCloseTo(36 / 9)
   })
 })
 
