@@ -26,6 +26,7 @@ export function normalizeHdrGainMapControls(
     highlightRolloffPct,
     shadowLift: clamp(merged.shadowLift, 0, 0.5),
     colorProtect: clamp(merged.colorProtect, 0, 1),
+    highlightChromaRecovery: clamp(merged.highlightChromaRecovery, 0, 1),
     detail: clamp(merged.detail, 0, 0.5),
     headroomStops: clamp(merged.headroomStops, 0, 4),
     midtoneLock: clamp(merged.midtoneLock, 0, 1),

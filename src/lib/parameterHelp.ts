@@ -16,6 +16,7 @@ export type ParameterHelpKey =
   | 'highlightRolloff'
   | 'shadowLift'
   | 'colorProtect'
+  | 'highlightChromaRecovery'
   | 'detail'
   | 'headroom'
   | 'midtoneLock'
@@ -72,6 +73,13 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
       summary: 'Reduces gain in highly saturated regions to avoid hue shifts and color clipping.',
       effect: 'Higher values protect neon colors, logos, skin, and saturated UI elements from excessive gain.',
       recommended: 'Raise it for vivid scenes or product images.',
+    },
+    highlightChromaRecovery: {
+      title: 'Highlight color fill',
+      summary: 'Restores subtle color into broad near-white highlights by borrowing chroma from nearby unclipped pixels.',
+      effect: 'Higher values tint low-saturation highlight regions toward adjacent reliable color without changing the gain-map encoding.',
+      recommended: 'Use low to medium values for skin, fabric, and diffuse highlights; keep it low for white objects or specular reflections.',
+      warning: 'This is an experimental color-reconstruction pass and can dirty highlights if pushed too far.',
     },
     detail: {
       title: 'Detail',
@@ -184,6 +192,13 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
       summary: '降低高饱和区域的 gain，避免色相漂移和颜色裁剪。',
       effect: '高数值会保护霓虹、logo、肤色和高饱和 UI 元素。',
       recommended: '鲜艳场景或产品图建议提高。',
+    },
+    highlightChromaRecovery: {
+      title: '高光补色',
+      summary: '从周围未裁剪像素借用色度，为大面积近白高光恢复轻微颜色。',
+      effect: '数值越高，低饱和高光越会向邻近可信颜色靠拢，但不会改变 gain-map 编码结构。',
+      recommended: '肤色、布料、漫反射高光可用低到中等强度；白色物体和镜面反光建议保持较低。',
+      warning: '这是实验性颜色重建，过高会让高光变脏。',
     },
     detail: {
       title: '细节',

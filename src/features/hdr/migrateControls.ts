@@ -57,6 +57,7 @@ export function migrateLegacyControls(input: LegacyBypassOptions): Partial<HdrGa
     highlightStartPct,
     highlightRolloffPct,
     colorProtect: protection,
+    highlightChromaRecovery: input.highlightChromaRecovery,
     shadowLift,
     detail,
     clipGuard:

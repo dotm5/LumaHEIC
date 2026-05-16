@@ -21,6 +21,7 @@ export type HdrGainMapControls = {
   highlightRolloffPct: number
   shadowLift: number
   colorProtect: number
+  highlightChromaRecovery: number
   detail: number
   headroomStops: number
   midtoneLock: number

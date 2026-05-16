@@ -107,6 +107,15 @@ export function ControlsPanel({
         />
         <ParameterSlider
           language={language}
+          label={t.highlightChromaRecovery}
+          help={help.highlightChromaRecovery}
+          value={options.highlightChromaRecovery}
+          {...hdrControlRanges.highlightChromaRecovery}
+          format={formatPercent}
+          onChange={(highlightChromaRecovery) => onUpdateOptions({ highlightChromaRecovery })}
+        />
+        <ParameterSlider
+          language={language}
           label={t.detail}
           help={help.detail}
           value={options.detail}

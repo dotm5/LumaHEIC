@@ -85,6 +85,20 @@ function brightPoint(width: number, height: number): RgbaImage {
   return image
 }
 
+function warmPatchWithWhiteHighlight(width: number, height: number): RgbaImage {
+  const image = solidRgb(width, height, 220, 150, 132)
+  const inset = Math.max(1, Math.floor(Math.min(width, height) / 3))
+  for (let y = inset; y < height - inset; y++) {
+    for (let x = inset; x < width - inset; x++) {
+      const index = (y * width + x) * 4
+      image.data[index] = 252
+      image.data[index + 1] = 252
+      image.data[index + 2] = 252
+    }
+  }
+  return image
+}
+
 function grayAt(image: RgbaImage, x: number, y: number) {
   return image.data[(y * image.width + x) * 4]
 }
@@ -107,6 +121,7 @@ describe('presets', () => {
     expect(defaultBypassOptions.headroomStops).toBeLessThanOrEqual(2)
     expect(defaultBypassOptions.highlightStartPct).toBeGreaterThanOrEqual(90)
     expect(defaultBypassOptions.colorProtect).toBeGreaterThan(0.8)
+    expect(defaultBypassOptions.highlightChromaRecovery).toBeGreaterThan(0)
     expect(defaultBypassOptions.gainMapResolutionMode).toBe('auto')
   })
 
@@ -163,6 +178,40 @@ describe('synthetic gain-map generation v2', () => {
     })
 
     expect(protectedResult.stats.gain.max).toBeLessThan(unprotected.stats.gain.max)
+  })
+
+  it('borrows nearby chroma for broad near-white highlights when recovery is enabled', () => {
+    const image = warmPatchWithWhiteHighlight(9, 9)
+    const withoutRecovery = generateSyntheticGainMapV2(image, {
+      ...pipelineTestControls,
+      highlightStartPct: 70,
+      highlightRolloffPct: 99.9,
+      highlightChromaRecovery: 0,
+    })
+    const withRecovery = generateSyntheticGainMapV2(image, {
+      ...pipelineTestControls,
+      highlightStartPct: 70,
+      highlightRolloffPct: 99.9,
+      highlightChromaRecovery: 1,
+    })
+    const center = (4 * 9 + 4) * 4
+    const neutralDelta = withoutRecovery.base.data[center] - withoutRecovery.base.data[center + 2]
+    const recoveredDelta = withRecovery.base.data[center] - withRecovery.base.data[center + 2]
+
+    expect(recoveredDelta).toBeGreaterThan(neutralDelta + 8)
+    expect(withRecovery.base.data[center + 1]).toBeLessThan(withRecovery.base.data[center])
+  })
+
+  it('leaves white highlights neutral when no reliable neighbor chroma exists', () => {
+    const result = generateSyntheticGainMapV2(solid(9, 9, 252), {
+      ...pipelineTestControls,
+      highlightStartPct: 70,
+      highlightRolloffPct: 99.9,
+      highlightChromaRecovery: 1,
+    })
+    const center = (4 * 9 + 4) * 4
+
+    expect(Array.from(result.base.data.slice(center, center + 3))).toEqual([252, 252, 252])
   })
 
   it('lets a small high point receive more gain than the surrounding image', () => {

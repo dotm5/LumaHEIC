@@ -38,6 +38,8 @@ const REC709_G = 0.7152
 const REC709_B = 0.0722
 const LOG_OFFSET = 1 / 64
 const LUMA_EPSILON = 1e-6
+const CHROMA_RECOVERY_RADIUS = 7
+const CHROMA_RECOVERY_MIN_WEIGHT = 0.015
 
 // Keep the tiny per-pixel helpers local to this hot pipeline. Cross-module calls
 // measurably slowed large image generation in dev/browser runs.
@@ -84,6 +86,114 @@ function saturationFromLinear(r: number, g: number, b: number) {
   const maxChannel = Math.max(r, g, b)
   const minChannel = Math.min(r, g, b)
   return maxChannel <= LUMA_EPSILON ? 0 : (maxChannel - minChannel) / Math.max(maxChannel, LUMA_EPSILON)
+}
+
+function applyHighlightChromaRecovery(
+  source: Uint8ClampedArray,
+  width: number,
+  height: number,
+  linearLuma: Float32Array,
+  saturation: Float32Array,
+  highlightMask: Float32Array,
+  amount: number,
+) {
+  const strength = clamp(amount)
+  if (strength <= 0) return source
+
+  const pixelCount = width * height
+  const data = new Uint8ClampedArray(source)
+  const chromaR = new Float32Array(pixelCount)
+  const chromaG = new Float32Array(pixelCount)
+  const chromaB = new Float32Array(pixelCount)
+  const donorWeight = new Float32Array(pixelCount)
+
+  for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
+    const r = srgbToLinear(source[i])
+    const g = srgbToLinear(source[i + 1])
+    const b = srgbToLinear(source[i + 2])
+    const luma = linearLuma[pixel]
+    const maxChannel = Math.max(r, g, b)
+    const clipped = smoothstep(0.9, 0.995, maxChannel)
+
+    chromaR[pixel] = r - luma
+    chromaG[pixel] = g - luma
+    chromaB[pixel] = b - luma
+    donorWeight[pixel] =
+      smoothstep(0.04, 0.22, saturation[pixel]) *
+      smoothstep(0.06, 0.55, luma) *
+      (1 - clipped)
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = y * width + x
+      const index = pixel * 4
+      const r = srgbToLinear(source[index])
+      const g = srgbToLinear(source[index + 1])
+      const b = srgbToLinear(source[index + 2])
+      const luma = linearLuma[pixel]
+      const maxChannel = Math.max(r, g, b)
+      const recoverMask =
+        strength *
+        highlightMask[pixel] *
+        smoothstep(0.45, 0.92, luma) *
+        smoothstep(0.84, 0.995, maxChannel) *
+        (1 - smoothstep(0.04, 0.22, saturation[pixel]))
+
+      if (recoverMask <= 0.001) continue
+
+      let weightSum = 0
+      let recoveredR = 0
+      let recoveredG = 0
+      let recoveredB = 0
+      const yStart = Math.max(0, y - CHROMA_RECOVERY_RADIUS)
+      const yEnd = Math.min(height - 1, y + CHROMA_RECOVERY_RADIUS)
+      const xStart = Math.max(0, x - CHROMA_RECOVERY_RADIUS)
+      const xEnd = Math.min(width - 1, x + CHROMA_RECOVERY_RADIUS)
+
+      for (let sy = yStart; sy <= yEnd; sy++) {
+        for (let sx = xStart; sx <= xEnd; sx++) {
+          const sample = sy * width + sx
+          const baseWeight = donorWeight[sample]
+          if (baseWeight <= 0) continue
+
+          const dx = sx - x
+          const dy = sy - y
+          const distanceSq = dx * dx + dy * dy
+          const spatialWeight = Math.exp(-distanceSq / (CHROMA_RECOVERY_RADIUS * CHROMA_RECOVERY_RADIUS * 0.45))
+          const lumaWeight = Math.exp(-Math.abs(linearLuma[sample] - luma) * 4)
+          const weight = baseWeight * spatialWeight * lumaWeight
+          weightSum += weight
+          recoveredR += chromaR[sample] * weight
+          recoveredG += chromaG[sample] * weight
+          recoveredB += chromaB[sample] * weight
+        }
+      }
+
+      if (weightSum <= CHROMA_RECOVERY_MIN_WEIGHT) continue
+
+      recoveredR /= weightSum
+      recoveredG /= weightSum
+      recoveredB /= weightSum
+
+      const compressedLuma = luma * (1 - recoverMask * smoothstep(0.92, 1, maxChannel) * 0.12)
+      let chromaScale = 1
+      for (const residual of [recoveredR, recoveredG, recoveredB]) {
+        if (residual > 0) chromaScale = Math.min(chromaScale, (1 - compressedLuma) / residual)
+        if (residual < 0) chromaScale = Math.min(chromaScale, compressedLuma / -residual)
+      }
+
+      const targetR = compressedLuma + recoveredR * Math.max(0, chromaScale)
+      const targetG = compressedLuma + recoveredG * Math.max(0, chromaScale)
+      const targetB = compressedLuma + recoveredB * Math.max(0, chromaScale)
+
+      data[index] = linearToSrgbByte(mix(r, targetR, recoverMask))
+      data[index + 1] = linearToSrgbByte(mix(g, targetG, recoverMask))
+      data[index + 2] = linearToSrgbByte(mix(b, targetB, recoverMask))
+    }
+  }
+
+  return data
 }
 
 function buildGrayImage(width: number, height: number, values: Float32Array, scale = 1): RgbaImage {
@@ -261,23 +371,32 @@ export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrG
 
   const gainPreview = buildGrayImage(width, height, encodedPreview)
   const highlightPreview = buildGrayImage(width, height, highlightMask)
+  const outputBase = applyHighlightChromaRecovery(
+    base,
+    width,
+    height,
+    linearLuma,
+    saturation,
+    highlightMask,
+    normalizedControls.highlightChromaRecovery,
+  )
   const hdrPreviewData = new Uint8ClampedArray(pixelCount * 4)
 
   for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
-    const r = srgbToLinear(base[i])
-    const g = srgbToLinear(base[i + 1])
-    const b = srgbToLinear(base[i + 2])
+    const r = srgbToLinear(outputBase[i])
+    const g = srgbToLinear(outputBase[i + 1])
+    const b = srgbToLinear(outputBase[i + 2])
     const boost = Math.pow(2, gainStops[pixel])
     hdrPreviewData[i] = linearToSrgbByte(r * boost)
     hdrPreviewData[i + 1] = linearToSrgbByte(g * boost)
     hdrPreviewData[i + 2] = linearToSrgbByte(b * boost)
-    hdrPreviewData[i + 3] = base[i + 3]
+    hdrPreviewData[i + 3] = outputBase[i + 3]
   }
 
   const totalMs = Math.round((performance.now() - started) * 10) / 10
 
   return {
-    base: { width, height, data: base },
+    base: { width, height, data: outputBase },
     gainMap,
     gainMapPreview: gainPreview,
     highlightMaskPreview: highlightPreview,

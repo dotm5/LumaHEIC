@@ -14,6 +14,7 @@ export const hdrControlRanges = {
   highlightRolloffPct: { min: 80.1, max: 99.9, step: 0.1 },
   shadowLift: { min: 0, max: 0.5, step: 0.01 },
   colorProtect: { min: 0, max: 1, step: 0.01 },
+  highlightChromaRecovery: { min: 0, max: 1, step: 0.01 },
   detail: { min: 0, max: 0.5, step: 0.01 },
   headroomStops: { min: 0, max: 4, step: 0.05 },
   midtoneLock: { min: 0, max: 1, step: 0.01 },
