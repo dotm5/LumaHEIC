@@ -216,6 +216,17 @@ describe('synthetic gain-map generation v2', () => {
     expect(result.stats.activePixels).toBe(0)
     expect(detectUsefulGain(image).isLowDynamicRange).toBe(true)
   })
+
+  it('computes stable luminance percentiles without sorting every pixel', () => {
+    const result = generateSyntheticGainMapV2(gradient(256, 1), pipelineTestControls)
+
+    expect(result.stats.luminance.p50).toBeCloseTo(0.21, 1)
+    expect(result.stats.luminance.p90).toBeCloseTo(0.79, 1)
+    expect(result.stats.luminance.p95).toBeCloseTo(0.89, 1)
+    expect(result.stats.luminance.p99).toBeLessThanOrEqual(1)
+    expect(result.stats.luminance.p50).toBeLessThan(result.stats.luminance.p90)
+    expect(result.stats.luminance.p90).toBeLessThan(result.stats.luminance.p99)
+  })
 })
 
 describe('gain map resolution', () => {

@@ -14,7 +14,15 @@ type ParameterFieldProps = {
   children: (describedById?: string) => React.ReactNode
 }
 
-export function ParameterField({ language, id, label, value, help, className, children }: ParameterFieldProps) {
+export const ParameterField = React.memo(function ParameterField({
+  language,
+  id,
+  label,
+  value,
+  help,
+  className,
+  children,
+}: ParameterFieldProps) {
   const {
     anchorRef,
     buttonRef,
@@ -86,7 +94,7 @@ export function ParameterField({ language, id, label, value, help, className, ch
         )}
     </div>
   )
-}
+})
 
 type FloatingHelpArgs = {
   language: Language
