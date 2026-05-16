@@ -146,9 +146,9 @@ describe('presets', () => {
   it('uses the High HDR preset as the default preset', () => {
     expect(defaultPresetId).toBe('macbookPro1600')
     expect(defaultBypassOptions).toEqual(hdrPresets.macbookPro1600)
-    expect(defaultBypassOptions.hdrStrengthStops).toBe(2.85)
-    expect(defaultBypassOptions.headroomStops).toBe(4)
-    expect(defaultBypassOptions.highlightStartPct).toBe(92)
+    expect(defaultBypassOptions.hdrStrengthStops).toBe(2.35)
+    expect(defaultBypassOptions.headroomStops).toBe(3)
+    expect(defaultBypassOptions.highlightStartPct).toBe(93)
     expect(defaultBypassOptions.highlightRolloffPct).toBe(99.7)
     expect(defaultBypassOptions.naturalSaturation).toBe(0.1)
     expect(defaultBypassOptions.gainMapResolutionMode).toBe('auto')
@@ -162,6 +162,12 @@ describe('presets', () => {
     expect(hdrPresets.bright.hdrStrengthStops).toBeGreaterThan(hdrPresets.natural.hdrStrengthStops)
     expect(hdrPresets.neonNight.headroomStops).toBeGreaterThan(hdrPresets.bright.headroomStops)
     expect(hdrPresets.macbookPro1600.naturalSaturation).toBeGreaterThan(hdrPresets.natural.naturalSaturation)
+  })
+
+  it('keeps every preset above the headroom safety margin', () => {
+    for (const preset of Object.values(hdrPresets)) {
+      expect(preset.headroomStops).toBeGreaterThanOrEqual(preset.hdrStrengthStops + headroomSafetyMarginStops)
+    }
   })
 })
 

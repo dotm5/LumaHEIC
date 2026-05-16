@@ -60,23 +60,24 @@ export type LegacyBypassOptions = Partial<
 >
 
 export const defaultPresetId: HdrPresetId = 'macbookPro1600'
+export const headroomSafetyMarginStops = 0.25
 
 export const defaultHdrGainMapControls: HdrGainMapControls = {
   preset: defaultPresetId,
-  hdrStrengthStops: 2.85,
-  highlightStartPct: 92.0,
+  hdrStrengthStops: 2.35,
+  highlightStartPct: 93.0,
   highlightRolloffPct: 99.7,
-  shadowLift: 0.18,
+  shadowLift: 0.16,
   naturalSaturation: 0.1,
-  detail: 0.08,
-  headroomStops: 4.0,
-  midtoneLock: 0.68,
-  whitePointGuardPct: 99.6,
+  detail: 0.07,
+  headroomStops: 3.0,
+  midtoneLock: 0.72,
+  whitePointGuardPct: 99.75,
   blackPointGuardPct: 0.2,
   edgeAwareRadius: 10,
   edgeAwareEps: 0.006,
-  clipGuard: 0.9,
-  gainMapGamma: 1.2,
+  clipGuard: 0.95,
+  gainMapGamma: 1.08,
   gainMapResolutionMode: 'auto',
 }
 
@@ -123,31 +124,31 @@ export const hdrPresets: Record<HdrPresetId, HdrGainMapControls> = {
   },
   bright: {
     preset: 'bright',
-    hdrStrengthStops: 1.75,
+    hdrStrengthStops: 1.55,
     highlightStartPct: 93.0,
     highlightRolloffPct: 99.6,
-    shadowLift: 0.22,
+    shadowLift: 0.2,
     naturalSaturation: 0.14,
     detail: 0.16,
-    headroomStops: 2.7,
+    headroomStops: 2.2,
     midtoneLock: 0.5,
     whitePointGuardPct: 99.7,
     blackPointGuardPct: 0.25,
     edgeAwareRadius: 8,
     edgeAwareEps: 0.0012,
-    clipGuard: 0.75,
+    clipGuard: 0.82,
     gainMapGamma: 1.04,
     gainMapResolutionMode: 'auto',
   },
   neonNight: {
     preset: 'neonNight',
-    hdrStrengthStops: 2.1,
+    hdrStrengthStops: 1.85,
     highlightStartPct: 91.0,
     highlightRolloffPct: 99.8,
     shadowLift: 0.2,
     naturalSaturation: 0.08,
     detail: 0.21,
-    headroomStops: 3.0,
+    headroomStops: 2.5,
     midtoneLock: 0.72,
     whitePointGuardPct: 99.86,
     blackPointGuardPct: 0.1,
@@ -159,13 +160,13 @@ export const hdrPresets: Record<HdrPresetId, HdrGainMapControls> = {
   },
   soft: {
     preset: 'soft',
-    hdrStrengthStops: 1.3,
+    hdrStrengthStops: 1.1,
     highlightStartPct: 94.5,
     highlightRolloffPct: 99.7,
     shadowLift: 0.14,
     naturalSaturation: 0.05,
     detail: 0.05,
-    headroomStops: 2.1,
+    headroomStops: 1.6,
     midtoneLock: 0.6,
     whitePointGuardPct: 99.75,
     blackPointGuardPct: 0.2,
@@ -177,13 +178,13 @@ export const hdrPresets: Record<HdrPresetId, HdrGainMapControls> = {
   },
   product: {
     preset: 'product',
-    hdrStrengthStops: 0.9,
+    hdrStrengthStops: 0.75,
     highlightStartPct: 96.5,
     highlightRolloffPct: 99.9,
     shadowLift: 0.08,
     naturalSaturation: 0.02,
     detail: 0.06,
-    headroomStops: 1.8,
+    headroomStops: 1.2,
     midtoneLock: 0.76,
     whitePointGuardPct: 99.92,
     blackPointGuardPct: 0.15,
@@ -196,7 +197,6 @@ export const hdrPresets: Record<HdrPresetId, HdrGainMapControls> = {
 }
 
 export const defaultBypassOptions: BypassOptions = hdrPresets[defaultPresetId]
-export const headroomSafetyMarginStops = 0.25
 
 export const gainMapResolutionModes: GainMapResolutionMode[] = [
   'auto',
