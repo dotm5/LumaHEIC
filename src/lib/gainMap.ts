@@ -81,6 +81,8 @@ const EDGE_SOFTEN_RADIUS = 2
 const EDGE_GAIN_SOFTEN_STRENGTH = 0.72
 const EDGE_SHADOW_SUPPRESS_STRENGTH = 0.85
 const GENERATED_GAIN_MAP_HIGHLIGHT_PRESERVE = 0.12
+const HIGHLIGHT_COHERENCE_CLOSE_RADIUS = 1
+const HIGHLIGHT_COHERENCE_OPEN_RADIUS = 1
 const srgbToLinearLut = new Float32Array(256)
 for (let value = 0; value < srgbToLinearLut.length; value++) {
   const v = value / 255
@@ -198,6 +200,139 @@ function buildContrastEdgeMask(values: Float32Array, width: number, height: numb
     spread[i] = smoothstep(0.02, 0.18, spread[i])
   }
   return spread
+}
+
+function refineHighlightMaskForContinuity(source: Float32Array, width: number, height: number) {
+  if (source.length === 0) return new Float32Array(0)
+  if (width < 3 || height < 3) return new Float32Array(source)
+
+  const closed = closeGrayMask(source, width, height, HIGHLIGHT_COHERENCE_CLOSE_RADIUS)
+  return openGrayMask(closed, width, height, HIGHLIGHT_COHERENCE_OPEN_RADIUS)
+}
+
+function closeGrayMask(source: Float32Array, width: number, height: number, radius: number) {
+  return erodeGrayMask(dilateGrayMask(source, width, height, radius), width, height, radius)
+}
+
+function openGrayMask(source: Float32Array, width: number, height: number, radius: number) {
+  return dilateGrayMask(erodeGrayMask(source, width, height, radius), width, height, radius)
+}
+
+function dilateGrayMask(source: Float32Array, width: number, height: number, radius: number) {
+  return applyGrayMorphology(source, width, height, radius, true)
+}
+
+function erodeGrayMask(source: Float32Array, width: number, height: number, radius: number) {
+  return applyGrayMorphology(source, width, height, radius, false)
+}
+
+function applyGrayMorphology(source: Float32Array, width: number, height: number, radius: number, useMax: boolean) {
+  const r = Math.max(0, Math.floor(radius))
+  if (r <= 0) return new Float32Array(source)
+  if (r === 1) return applyGrayMorphologyRadiusOne(source, width, height, useMax)
+
+  const horizontal = new Float32Array(source.length)
+  const output = new Float32Array(source.length)
+  const dequeLength = Math.max(width, height)
+  const deque = new Int32Array(dequeLength)
+
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * width
+    let head = 0
+    let tail = 0
+    let nextAdd = 0
+    for (let x = 0; x < width; x++) {
+      const addLimit = Math.min(width - 1, x + r)
+      while (nextAdd <= addLimit) {
+        const addValueIndex = rowOffset + nextAdd
+        const addValue = source[addValueIndex]
+        while (tail > head) {
+          const lastIndex = rowOffset + deque[tail - 1]
+          const lastValue = source[lastIndex]
+          if (useMax ? lastValue >= addValue : lastValue <= addValue) break
+          tail -= 1
+        }
+        deque[tail++] = nextAdd
+        nextAdd += 1
+      }
+
+      const removeLimit = x - r
+      while (head < tail && deque[head] < removeLimit) {
+        head += 1
+      }
+
+      horizontal[rowOffset + x] = source[rowOffset + deque[head]]
+    }
+  }
+
+  for (let x = 0; x < width; x++) {
+    let head = 0
+    let tail = 0
+    let nextAdd = 0
+    for (let y = 0; y < height; y++) {
+      const addLimit = Math.min(height - 1, y + r)
+      while (nextAdd <= addLimit) {
+        const addValueIndex = nextAdd * width + x
+        const addValue = horizontal[addValueIndex]
+        while (tail > head) {
+          const lastIndex = deque[tail - 1] * width + x
+          const lastValue = horizontal[lastIndex]
+          if (useMax ? lastValue >= addValue : lastValue <= addValue) break
+          tail -= 1
+        }
+        deque[tail++] = nextAdd
+        nextAdd += 1
+      }
+
+      const removeLimit = y - r
+      while (head < tail && deque[head] < removeLimit) {
+        head += 1
+      }
+
+      output[y * width + x] = horizontal[deque[head] * width + x]
+    }
+  }
+
+  return output
+}
+
+function applyGrayMorphologyRadiusOne(source: Float32Array, width: number, height: number, useMax: boolean) {
+  const horizontal = new Float32Array(source.length)
+  const output = new Float32Array(source.length)
+
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * width
+    for (let x = 0; x < width; x++) {
+      let value = source[rowOffset + x]
+      if (x > 0) {
+        const neighbor = source[rowOffset + x - 1]
+        value = useMax ? Math.max(value, neighbor) : Math.min(value, neighbor)
+      }
+      if (x < width - 1) {
+        const neighbor = source[rowOffset + x + 1]
+        value = useMax ? Math.max(value, neighbor) : Math.min(value, neighbor)
+      }
+      horizontal[rowOffset + x] = value
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * width
+    for (let x = 0; x < width; x++) {
+      let value = horizontal[rowOffset + x]
+      if (y > 0) {
+        const neighbor = horizontal[rowOffset + x - width]
+        value = useMax ? Math.max(value, neighbor) : Math.min(value, neighbor)
+      }
+      if (y < height - 1) {
+        const neighbor = horizontal[rowOffset + x + width]
+        value = useMax ? Math.max(value, neighbor) : Math.min(value, neighbor)
+      }
+      output[rowOffset + x] = value
+    }
+  }
+
+  return output
 }
 
 function buildHistogram(values: Float32Array, min: number, max: number) {
@@ -343,7 +478,6 @@ export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrG
   const highlightIntensityGate = smoothstep(0.08, 0.35, maxLinearLuma)
 
   for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
-    const luma = linearLuma[pixel]
     const logY = logLuma[pixel]
 
     const highlightRamp = smoothstep(effectiveStart, effectiveRolloff, logY)
@@ -353,14 +487,21 @@ export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrG
       highlightShape * mix(1, whiteGuard, normalizedControls.clipGuard * 0.5) * highlightIntensityGate,
     )
     highlightMask[pixel] = highlightMaskValue
+
+    const shadowRamp = 1 - smoothstep(thresholdBlack, shadowUpper, logY)
+    shadowMask[pixel] = clamp(shadowRamp)
+  }
+
+  const coherentHighlightMask = refineHighlightMaskForContinuity(highlightMask, width, height)
+
+  for (let pixel = 0, i = 0; pixel < pixelCount; pixel++, i += 4) {
+    const luma = linearLuma[pixel]
+    const highlightMaskValue = coherentHighlightMask[pixel]
     const highlightGray = linearGrayByte(highlightMaskValue)
     highlightPreviewData[i] = highlightGray
     highlightPreviewData[i + 1] = highlightGray
     highlightPreviewData[i + 2] = highlightGray
     highlightPreviewData[i + 3] = 255
-
-    const shadowRamp = 1 - smoothstep(thresholdBlack, shadowUpper, logY)
-    shadowMask[pixel] = clamp(shadowRamp)
 
     const highlightStops = normalizedControls.hdrStrengthStops * highlightMaskValue
     const shadowStops = normalizedControls.shadowLift * shadowMask[pixel] * (1 - highlightMaskValue * 0.7)
@@ -373,8 +514,8 @@ export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrG
   }
 
   const smoothSource = normalizedControls.edgeAwareRadius > 0
-    ? guidedFilter(linearLuma, highlightMask, width, height, normalizedControls.edgeAwareRadius, normalizedControls.edgeAwareEps)
-    : highlightMask
+    ? guidedFilter(linearLuma, coherentHighlightMask, width, height, normalizedControls.edgeAwareRadius, normalizedControls.edgeAwareEps)
+    : coherentHighlightMask
   const detailMix = clamp(normalizedControls.detail / 0.5, 0, 1)
   const contrastEdgeMask = buildContrastEdgeMask(logLuma, width, height)
   const edgeSoftGain = boxFilterMean(rawGainStops, width, height, EDGE_SOFTEN_RADIUS)
@@ -393,7 +534,7 @@ export function generateSyntheticGainMapV2(inputImage: ImageLike, controls: HdrG
     const b = srgbToLinear(source[i + 2])
     const maxChannel = Math.max(r, g, b)
     const detailWeighted = mix(rawGainStops[pixel], rawHighlightGain[pixel], detailMix)
-    const detailMask = clamp(mix(smoothSource[pixel], highlightMask[pixel], detailMix))
+    const detailMask = clamp(mix(smoothSource[pixel], coherentHighlightMask[pixel], detailMix))
     const edgeAmount = contrastEdgeMask[pixel]
     let gainStop = Math.max(0, detailWeighted)
 

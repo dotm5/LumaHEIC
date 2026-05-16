@@ -85,6 +85,42 @@ function brightPoint(width: number, height: number): RgbaImage {
   return image
 }
 
+function brightSquare(width: number, height: number, size: number): RgbaImage {
+  const image = solid(width, height, 72)
+  const startX = Math.floor((width - size) / 2)
+  const startY = Math.floor((height - size) / 2)
+  for (let y = startY; y < startY + size; y++) {
+    for (let x = startX; x < startX + size; x++) {
+      const index = (y * width + x) * 4
+      image.data[index] = 255
+      image.data[index + 1] = 255
+      image.data[index + 2] = 255
+    }
+  }
+  return image
+}
+
+function separatedHighlights(width: number, height: number): RgbaImage {
+  const image = solid(width, height, 72)
+  const top = Math.floor(height / 2) - 2
+  const bottom = top + 5
+  for (let y = top; y < bottom; y++) {
+    for (let x = 6; x <= 9; x++) {
+      const index = (y * width + x) * 4
+      image.data[index] = 255
+      image.data[index + 1] = 255
+      image.data[index + 2] = 255
+    }
+    for (let x = 11; x <= 14; x++) {
+      const index = (y * width + x) * 4
+      image.data[index] = 255
+      image.data[index + 1] = 255
+      image.data[index + 2] = 255
+    }
+  }
+  return image
+}
+
 function grayAt(image: RgbaImage, x: number, y: number) {
   return image.data[(y * image.width + x) * 4]
 }
@@ -175,17 +211,40 @@ describe('synthetic gain-map generation v2', () => {
     expect(Array.from(neutralResult.base.data.slice(0, 3))).toEqual([130, 130, 130])
   })
 
-  it('lets a small high point receive more gain than the surrounding image', () => {
-    const result = generateSyntheticGainMapV2(brightPoint(16, 16), {
+  it('suppresses isolated bright points while preserving coherent highlights', () => {
+    const isolated = generateSyntheticGainMapV2(brightPoint(24, 24), {
+      ...pipelineTestControls,
+      hdrStrengthStops: 2,
+      highlightStartPct: 95,
+      highlightRolloffPct: 99.9,
+    })
+    const coherent = generateSyntheticGainMapV2(brightSquare(24, 24, 5), {
       ...pipelineTestControls,
       hdrStrengthStops: 2,
       highlightStartPct: 95,
       highlightRolloffPct: 99.9,
     })
 
-    const center = grayAt(result.gainMapPreview, 8, 8)
-    const background = grayAt(result.gainMapPreview, 0, 0)
-    expect(center).toBeGreaterThan(background + 50)
+    const isolatedCenter = grayAt(isolated.gainMapPreview, 12, 12)
+    const coherentCenter = grayAt(coherent.gainMapPreview, 12, 12)
+    expect(isolatedCenter).toBeLessThan(32)
+    expect(coherentCenter).toBeGreaterThan(isolatedCenter + 50)
+  })
+
+  it('fills narrow gaps between coherent highlight regions', () => {
+    const result = generateSyntheticGainMapV2(separatedHighlights(22, 12), {
+      ...pipelineTestControls,
+      hdrStrengthStops: 2,
+      highlightStartPct: 80,
+      highlightRolloffPct: 99.9,
+    })
+
+    const y = 6
+    const leftHighlight = grayAt(result.highlightMaskPreview, 9, y)
+    const filledGap = grayAt(result.highlightMaskPreview, 10, y)
+    const rightHighlight = grayAt(result.highlightMaskPreview, 11, y)
+    expect(filledGap).toBeGreaterThan(40)
+    expect(filledGap).toBeGreaterThanOrEqual(Math.min(leftHighlight, rightHighlight) * 0.5)
   })
 
   it('uses clip guard to reduce excessive gain on a bright white field', () => {
@@ -207,7 +266,7 @@ describe('synthetic gain-map generation v2', () => {
   })
 
   it('encodes synthetic gain against absolute headroom instead of always filling the full byte range', () => {
-    const image = brightPoint(16, 16)
+    const image = brightSquare(16, 16, 5)
     const lowStrength = generateSyntheticGainMapV2(image, {
       ...pipelineTestControls,
       hdrStrengthStops: 1,
