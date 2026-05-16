@@ -3,6 +3,7 @@ import React from 'react'
 import {
   gainMapResolutionModes,
   hdrPresets,
+  linkHeadroomToStrength,
   type BypassOptions,
   type GainMapResolutionMode,
   type PresetId,
@@ -47,13 +48,15 @@ export const ControlsPanel = React.memo(function ControlsPanel({
       onPresetChange: (value: string) => {
         if (value !== 'custom') onApplyPreset(value as PresetId)
       },
-      onHdrStrengthStops: (hdrStrengthStops: number) => onUpdateOptions({ hdrStrengthStops }),
+      onHdrStrengthStops: (hdrStrengthStops: number) =>
+        onUpdateOptions(linkHeadroomToStrength(options, { hdrStrengthStops })),
       onHighlightStartPct: (highlightStartPct: number) => onUpdateOptions({ highlightStartPct }),
       onHighlightRolloffPct: (highlightRolloffPct: number) => onUpdateOptions({ highlightRolloffPct }),
       onShadowLift: (shadowLift: number) => onUpdateOptions({ shadowLift }),
       onNaturalSaturation: (naturalSaturation: number) => onUpdateOptions({ naturalSaturation }),
       onDetail: (detail: number) => onUpdateOptions({ detail }),
-      onHeadroomStops: (headroomStops: number) => onUpdateOptions({ headroomStops }),
+      onHeadroomStops: (headroomStops: number) =>
+        onUpdateOptions(linkHeadroomToStrength(options, { headroomStops })),
       onMidtoneLock: (midtoneLock: number) => onUpdateOptions({ midtoneLock }),
       onEdgeAwareRadius: (edgeAwareRadius: number) => onUpdateOptions({ edgeAwareRadius }),
       onEdgeAwareEps: (edgeAwareEps: number) => onUpdateOptions({ edgeAwareEps }),
@@ -64,7 +67,7 @@ export const ControlsPanel = React.memo(function ControlsPanel({
       onGainMapResolutionMode: (gainMapResolutionMode: string) =>
         onUpdateOptions({ gainMapResolutionMode: gainMapResolutionMode as GainMapResolutionMode }),
     }),
-    [onApplyPreset, onUpdateOptions],
+    [onApplyPreset, onUpdateOptions, options],
   )
 
   const presetOptions = React.useMemo(

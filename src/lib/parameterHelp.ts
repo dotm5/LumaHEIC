@@ -47,7 +47,7 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
       title: 'HDR strength',
       summary: 'Controls the maximum HDR boost in stops.',
       effect: 'Higher values make selected highlights expand further above the SDR base on compatible HDR/EDR displays.',
-      recommended: 'Keep moderate unless the source has clear specular highlights.',
+      recommended: 'Keep moderate unless the source has clear specular highlights. Headroom is raised with this control to avoid white clipping.',
     },
     highlightStart: {
       title: 'Highlight start',
@@ -83,7 +83,7 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
       title: 'Headroom',
       summary: 'Sets the intended maximum HDR expansion above the SDR base.',
       effect: 'This controls the gain-map metadata headroom and the clip guard ceiling.',
-      recommended: 'Around 2 stops is a conservative default.',
+      recommended: 'Around 2 stops is a conservative default. Pulling this below HDR strength also lowers strength to avoid white clipping.',
     },
     midtoneLock: {
       title: 'Midtone lock',
@@ -159,7 +159,7 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
       title: 'HDR 强度',
       summary: '控制最大 HDR 提升档数。',
       effect: '数值越高，被选中的高光在兼容 HDR/EDR 显示上会比 SDR 基图扩展得更明显。',
-      recommended: '除非源图有明确高光反射，否则保持中等强度。',
+      recommended: '除非源图有明确高光反射，否则保持中等强度。提高此项时会同步提高 headroom，避免白色裁剪。',
     },
     highlightStart: {
       title: '高光起点',
@@ -195,7 +195,7 @@ export const parameterHelp: Record<Language, Record<ParameterHelpKey, ParameterH
       title: 'Headroom',
       summary: '设置相对 SDR 基图的目标最大 HDR 扩展。',
       effect: '它会影响 gain-map metadata headroom 和裁剪保护上限。',
-      recommended: '2 档左右是保守默认值。',
+      recommended: '2 档左右是保守默认值。低于 HDR 强度安全线时会同步降低强度，避免白色裁剪。',
     },
     midtoneLock: {
       title: '中灰锁定',

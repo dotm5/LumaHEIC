@@ -196,6 +196,7 @@ export const hdrPresets: Record<HdrPresetId, HdrGainMapControls> = {
 }
 
 export const defaultBypassOptions: BypassOptions = hdrPresets[defaultPresetId]
+export const headroomSafetyMarginStops = 0.25
 
 export const gainMapResolutionModes: GainMapResolutionMode[] = [
   'auto',
@@ -244,6 +245,30 @@ export function normalizeHdrGainMapControls(
     customGainMapWidth: normalizePositiveInteger(merged.customGainMapWidth),
     customGainMapHeight: normalizePositiveInteger(merged.customGainMapHeight),
   }
+}
+
+export function linkHeadroomToStrength(
+  state: Pick<HdrGainMapControls, 'hdrStrengthStops' | 'headroomStops'>,
+  patch: Partial<Pick<HdrGainMapControls, 'hdrStrengthStops' | 'headroomStops'>>,
+) {
+  const hasStrength = typeof patch.hdrStrengthStops === 'number'
+  const hasHeadroom = typeof patch.headroomStops === 'number'
+  const strength = clamp(hasStrength ? patch.hdrStrengthStops ?? 0 : state.hdrStrengthStops, 0, 3)
+  const headroom = clamp(hasHeadroom ? patch.headroomStops ?? 0 : state.headroomStops, 0, 4)
+  const linkedPatch: Partial<Pick<HdrGainMapControls, 'hdrStrengthStops' | 'headroomStops'>> = { ...patch }
+
+  if (hasStrength && !hasHeadroom) {
+    linkedPatch.hdrStrengthStops = strength
+    linkedPatch.headroomStops = Math.max(headroom, Math.min(4, strength + headroomSafetyMarginStops))
+  } else if (hasHeadroom && !hasStrength) {
+    linkedPatch.headroomStops = headroom
+    linkedPatch.hdrStrengthStops = Math.min(strength, Math.max(0, headroom - headroomSafetyMarginStops))
+  } else if (hasStrength && hasHeadroom && strength + headroomSafetyMarginStops > headroom) {
+    linkedPatch.hdrStrengthStops = Math.max(0, headroom - headroomSafetyMarginStops)
+    linkedPatch.headroomStops = headroom
+  }
+
+  return linkedPatch
 }
 
 export function isHdrPresetId(value: unknown): value is HdrPresetId {

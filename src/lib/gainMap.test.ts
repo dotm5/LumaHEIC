@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { defaultBypassOptions, defaultPresetId, hdrPresets } from './authoring'
+import {
+  defaultBypassOptions,
+  defaultPresetId,
+  headroomSafetyMarginStops,
+  hdrPresets,
+  linkHeadroomToStrength,
+} from './authoring'
 import {
   authorBasePlusGainMap,
   boxFilterMean,
@@ -156,6 +162,22 @@ describe('presets', () => {
     expect(hdrPresets.bright.hdrStrengthStops).toBeGreaterThan(hdrPresets.natural.hdrStrengthStops)
     expect(hdrPresets.neonNight.headroomStops).toBeGreaterThan(hdrPresets.bright.headroomStops)
     expect(hdrPresets.macbookPro1600.naturalSaturation).toBeGreaterThan(hdrPresets.natural.naturalSaturation)
+  })
+})
+
+describe('headroom safety link', () => {
+  it('raises headroom when HDR strength would exceed the safe range', () => {
+    const patch = linkHeadroomToStrength({ hdrStrengthStops: 1, headroomStops: 1.5 }, { hdrStrengthStops: 2 })
+
+    expect(patch.hdrStrengthStops).toBe(2)
+    expect(patch.headroomStops).toBeCloseTo(2 + headroomSafetyMarginStops)
+  })
+
+  it('lowers HDR strength when headroom is pulled below the safety margin', () => {
+    const patch = linkHeadroomToStrength({ hdrStrengthStops: 2.5, headroomStops: 3 }, { headroomStops: 1.5 })
+
+    expect(patch.headroomStops).toBe(1.5)
+    expect(patch.hdrStrengthStops).toBeCloseTo(1.5 - headroomSafetyMarginStops)
   })
 })
 
