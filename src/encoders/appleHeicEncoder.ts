@@ -1,3 +1,4 @@
+import { preserveSourceExif } from '../lib/heicExif'
 import type { HeicEncodeRequest, HeicEncodeResult } from '../lib/encoderTypes'
 
 type NativeModule = {
@@ -100,7 +101,9 @@ function encodeWithNativeModule(module: NativeModule, request: HeicEncodeRequest
       kind: 'heic',
       fileName: withExtension(request.sourceName, '.heic'),
       mimeType: 'image/heic',
-      bytes,
+      bytes: request.sourceExif
+        ? preserveSourceExif(bytes, request.sourceExif, result.base.width, result.base.height)
+        : bytes,
       message: 'Encoded HDR gain-map HEIC locally in your browser.',
     }
   } finally {

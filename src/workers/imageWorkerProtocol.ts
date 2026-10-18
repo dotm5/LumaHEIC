@@ -12,6 +12,7 @@ export type ProcessWorkerRequest = {
   id: number
   mode: InputMode
   sourceName: string
+  sourceExif?: Uint8Array
   image: RgbaImage
   gainMapImage?: RgbaImage
   options: BypassOptions

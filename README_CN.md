@@ -199,3 +199,9 @@ HEVC 编码和分发可能涉及专利或平台授权义务，具体取决于应
 ## 商标声明
 
 本项目与 Apple Inc. 没有关联，也未获得其赞助、认可或背书。Apple、Photos、macOS、iOS、iPhone、iPad、Quick Look、Preview 及相关名称是 Apple Inc. 的商标。README 中对这些名称的引用仅用于兼容性说明和技术验证目的。
+
+### 原图 EXIF 元数据
+
+导出 HEIC 时，保留 JPEG、PNG（`eXIf`）和 WebP（`EXIF`）输入中的 EXIF，包括原有的拍摄时间、相机/镜头信息、作者/版权及 GPS。在 Base + Gain Map 模式下，仅使用底图的元数据。
+
+浏览器解码已应用原图方向，因此导出方向归一为 1，并更新图像尺寸、色彩空间及 Software。原厂 MakerNote 替换为编码器本次生成的 Apple HDR MakerNote，原图缩略图不再被引用。首版不保留原始 XMP/IPTC/ICC，也暂不提取 TIFF/AVIF 中的 EXIF。EXIF 缺失、格式损坏或超过 1 MiB 时，使用编码器生成的元数据。其他原图 EXIF 作为拍摄记录保留，不根据编辑后的像素重新计算。

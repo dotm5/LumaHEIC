@@ -48,6 +48,7 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     postProgress(request.id, workerProgressMessages.encodingHeic)
     const encoded = await encodeAppleHdrHeic({
       sourceName: request.sourceName,
+      sourceExif: request.sourceExif,
       result,
       options: request.options,
       quality: request.quality,

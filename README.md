@@ -199,3 +199,9 @@ HEVC encoding and distribution may involve patent or platform licensing obligati
 ## Trademark Notice
 
 This project is not affiliated with, endorsed by, or sponsored by Apple Inc. Apple, Photos, macOS, iOS, iPhone, iPad, Quick Look, Preview, and related names are trademarks of Apple Inc. References to these names are used only for compatibility and technical verification purposes.
+
+### Source EXIF metadata
+
+HEIC exports preserve the source image's EXIF from JPEG, PNG (`eXIf`) and WebP (`EXIF`) inputs, including capture time, camera/lens details, author/copyright and GPS when present. In Base + Gain Map mode, metadata comes from the base image only.
+
+Orientation is normalized to 1 because browser decoding already applies it; image dimensions, color space and Software are updated for the export. The source MakerNote is replaced with the encoder's current Apple HDR MakerNote, and the source thumbnail is not referenced. Original XMP/IPTC/ICC and EXIF extraction from TIFF/AVIF are outside this initial implementation. Absent, malformed or EXIF blocks larger than 1 MiB fall back to the encoder's generated metadata. Other source EXIF values are retained as capture metadata, not recomputed for edited pixels.
