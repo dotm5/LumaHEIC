@@ -1,3 +1,4 @@
+import { tiffOrientationTransform } from './tiffOrientation'
 import type { RgbaImage } from './gainMap'
 import {
   createTrackedObjectURL,
@@ -242,12 +243,21 @@ async function createTiffDecodedImageSource(file: File, signal?: AbortSignal): P
   if (!ctx) throw new Error('Could not create a TIFF canvas context.')
 
   ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0)
+  const orientation = Array.isArray(ifd.t274) ? Number(ifd.t274[0]) : Number(ifd.t274 ?? 1)
+  const oriented = tiffOrientationTransform(width, height, orientation)
 
   return {
-    width,
-    height,
+    width: oriented.width,
+    height: oriented.height,
     draw(targetCtx, targetWidth, targetHeight) {
-      targetCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight)
+      targetCtx.save()
+      try {
+        targetCtx.scale(targetWidth / oriented.width, targetHeight / oriented.height)
+        targetCtx.transform(...oriented.matrix)
+        targetCtx.drawImage(canvas, 0, 0)
+      } finally {
+        targetCtx.restore()
+      }
     },
     cleanup() {
       ctx.clearRect(0, 0, canvas.width, canvas.height)

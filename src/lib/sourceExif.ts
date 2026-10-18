@@ -1,3 +1,5 @@
+import { extractBmffExif } from './bmffExif'
+
 // Keep original TIFF-relative offsets intact: append replacement directories,
 // rather than relocating opaque camera/GPS metadata. Input pixels are not copied.
 const maxExifBytes = 1024 * 1024
@@ -46,14 +48,17 @@ function tiff(bytes: Uint8Array) {
     }
   }
   validateChildren(root, 0)
-  return { view, little, root, exif, pointer }
+  return { view, little, root, exif, pointer, readIfd }
 }
 
-/** First EXIF block from JPEG, PNG or WebP. Unsupported/malformed metadata is ignored. */
+/** Capture EXIF from JPEG, PNG, WebP, classic TIFF or AVIF. Malformed metadata is ignored. */
 export function extractSourceExif(bytes: Uint8Array): Uint8Array | undefined {
   let payload: Uint8Array | undefined
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   try {
+    if (ascii(bytes, 0, 2) === 'II' || ascii(bytes, 0, 2) === 'MM') {
+      return compactTiffExif(bytes)
+    }
     if (bytes[0] === 0xff && bytes[1] === 0xd8) {
       let pos = 2
       while (pos + 4 <= bytes.length) {
@@ -94,6 +99,7 @@ export function extractSourceExif(bytes: Uint8Array): Uint8Array | undefined {
         pos += 8 + size + (size % 2)
       }
     }
+    if (!payload) payload = extractBmffExif(bytes)
     if (!payload || payload.length > maxExifBytes) return undefined
     tiff(payload)
     return payload.slice()
@@ -133,7 +139,7 @@ export function mergeSourceExif(source: Uint8Array, generated: Uint8Array, width
   // and browser decoding has already applied EXIF orientation.
   const root = original.root.filter((e) => ![
     0x100, 0x101, 0x103, 0x111, 0x112, 0x116, 0x117, 0x131,
-    0x144, 0x145, 0x14a, 0x201, 0x202, 0x8769,
+    0x144, 0x145, 0x14a, 0x201, 0x202, 0x02bc, 0x83bb, 0x8773, 0x8769,
   ].includes(e.tag))
   root.push(entry(0x100, 4, 1, width), entry(0x101, 4, 1, height), entry(0x112, 3, 1, 1),
     entry(0x131, 2, software.length, softwareOffset), entry(0x8769, 4, 1, exifOffset))
@@ -152,4 +158,99 @@ export function mergeSourceExif(source: Uint8Array, generated: Uint8Array, width
   writeIfd(rootOffset, root)
   view.setUint32(4, rootOffset, little)
   return output
+}
+
+// Only capture/device metadata may be relocated from a TIFF image file. Unknown
+// tags, opaque MakerNotes, image storage, SubIFDs, XMP/IPTC/ICC and IFD1 are omitted.
+const captureRootTags = new Set([0x010d, 0x010e, 0x010f, 0x0110, 0x0112, 0x0131, 0x0132, 0x013b, 0x013c, 0x8298])
+const captureExifTags = new Set([
+  0x829a, 0x829d, 0x8822, 0x8824, 0x8827, 0x8828, 0x8830, 0x8831, 0x8832, 0x8833, 0x8834, 0x8835,
+  0x9000, 0x9003, 0x9004, 0x9010, 0x9011, 0x9012,
+  0x9201, 0x9202, 0x9203, 0x9204, 0x9205, 0x9206, 0x9207, 0x9208, 0x9209, 0x920a, 0x9214,
+  0x9286, 0x9290, 0x9291, 0x9292, 0x9400, 0x9401, 0x9402, 0x9403, 0x9404, 0x9405,
+  0xa20b, 0xa20e, 0xa20f, 0xa210, 0xa214, 0xa215, 0xa217, 0xa300, 0xa301, 0xa302,
+  0xa401, 0xa402, 0xa403, 0xa404, 0xa405, 0xa406, 0xa407, 0xa408, 0xa409, 0xa40a, 0xa40b, 0xa40c,
+  0xa420, 0xa430, 0xa431, 0xa432, 0xa433, 0xa434, 0xa435,
+])
+
+/** Repack selected values; no original TIFF offsets or image bytes survive. */
+function compactTiffExif(source: Uint8Array) {
+  const original = tiff(source)
+  const { little } = original
+  const gpsPointer = original.root.find((entry) => entry.tag === 0x8825)
+  const groups = [
+    original.root.filter((entry) => captureRootTags.has(entry.tag)),
+    original.exif.filter((entry) => captureExifTags.has(entry.tag)),
+    gpsPointer ? original.readIfd(original.pointer(gpsPointer)).filter((entry) => entry.tag <= 0x001f) : [],
+  ]
+  const pointerEntry = (tag: number, offset: number): Entry => {
+    const raw = new Uint8Array(12)
+    const v = new DataView(raw.buffer)
+    v.setUint16(0, tag, little); v.setUint16(2, 4, little); v.setUint32(4, 1, little); v.setUint32(8, offset, little)
+    return { tag, raw }
+  }
+  // Reserve root child-pointer entries before assigning directory offsets.
+  if (groups[1].length) groups[0].push(pointerEntry(0x8769, 0))
+  if (groups[2].length) groups[0].push(pointerEntry(0x8825, 0))
+  const offsets: number[] = []
+  let size = 8
+  for (const entries of groups) { offsets.push(size); size += 2 + entries.length * 12 + 4 }
+  for (const entry of groups[0]) {
+    if (entry.tag === 0x8769 || entry.tag === 0x8825) {
+      new DataView(entry.raw.buffer).setUint32(8, offsets[entry.tag === 0x8769 ? 1 : 2], little)
+    }
+  }
+  const values: { offset: number; bytes: Uint8Array }[] = []
+  for (const entries of groups) {
+    for (const entry of entries) {
+      const ev = new DataView(entry.raw.buffer)
+      const type = ev.getUint16(2, little)
+      if (type === 13) throw new Error('Unexpected TIFF pointer value')
+      const length = typeSizes[type] * ev.getUint32(4, little)
+      if (length <= 4) continue
+      const start = original.pointer(entry)
+      if (size + length > maxExifBytes) throw new Error('Oversized TIFF capture metadata')
+      values.push({ offset: size, bytes: source.subarray(start, start + length) })
+      ev.setUint32(8, size, little)
+      size += length + (length % 2)
+    }
+  }
+  const output = new Uint8Array(size)
+  output.set(source.subarray(0, 4))
+  const view = new DataView(output.buffer)
+  view.setUint32(4, 8, little)
+  groups.forEach((entries, index) => {
+    entries.sort((a, b) => a.tag - b.tag)
+    view.setUint16(offsets[index], entries.length, little)
+    entries.forEach((entry, i) => output.set(entry.raw, offsets[index] + 2 + i * 12))
+  })
+  for (const value of values) output.set(value.bytes, value.offset)
+  return output
+}
+
+/** Semantic XMP mirror of selected capture fields, never an opaque source XMP copy. */
+export function captureXmpDescription(source: Uint8Array, width: number, height: number) {
+  const parsed = tiff(source)
+  const text = (entries: Entry[], tag: number) => {
+    const entry = entries.find((entry) => entry.tag === tag)
+    if (!entry) return undefined
+    const v = new DataView(entry.raw.buffer)
+    if (v.getUint16(2, parsed.little) !== 2) return undefined
+    const count = v.getUint32(4, parsed.little)
+    const bytes = count <= 4 ? entry.raw.subarray(8, 8 + count) : source.subarray(parsed.pointer(entry), parsed.pointer(entry) + count)
+    return [...new TextDecoder().decode(bytes).replace(/\0.*$/, '')]
+      .filter((char) => char.charCodeAt(0) >= 32 || ['\t', '\n', '\r'].includes(char)).join('')
+  }
+  const escape = (value: string | number) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+  const scalar = (name: string, value: string | number | undefined) => value === undefined ? '' : `<${name}>${escape(value)}</${name}>`
+  const creator = text(parsed.root, 0x013b)
+  const rights = text(parsed.root, 0x8298)
+  return '<rdf:Description rdf:about="" xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">'
+    + scalar('tiff:Make', text(parsed.root, 0x010f)) + scalar('tiff:Model', text(parsed.root, 0x0110))
+    + scalar('tiff:ImageWidth', width) + scalar('tiff:ImageLength', height) + scalar('tiff:Orientation', 1)
+    + scalar('exif:PixelXDimension', width) + scalar('exif:PixelYDimension', height) + scalar('exif:ColorSpace', 65535)
+    + scalar('xmp:CreatorTool', 'LumaHEIC')
+    + (creator === undefined ? '' : `<dc:creator><rdf:Seq><rdf:li>${escape(creator)}</rdf:li></rdf:Seq></dc:creator>`)
+    + (rights === undefined ? '' : `<dc:rights><rdf:Alt><rdf:li xml:lang="x-default">${escape(rights)}</rdf:li></rdf:Alt></dc:rights>`)
+    + '</rdf:Description>'
 }

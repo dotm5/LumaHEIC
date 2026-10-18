@@ -200,8 +200,13 @@ HEVC encoding and distribution may involve patent or platform licensing obligati
 
 This project is not affiliated with, endorsed by, or sponsored by Apple Inc. Apple, Photos, macOS, iOS, iPhone, iPad, Quick Look, Preview, and related names are trademarks of Apple Inc. References to these names are used only for compatibility and technical verification purposes.
 
-### Source EXIF metadata
+### Source capture metadata
 
-HEIC exports preserve the source image's EXIF from JPEG, PNG (`eXIf`) and WebP (`EXIF`) inputs, including capture time, camera/lens details, author/copyright and GPS when present. In Base + Gain Map mode, metadata comes from the base image only.
+HEIC exports preserve EXIF from JPEG, PNG (`eXIf`), WebP (`EXIF`), AVIF and classic TIFF inputs. In Base + Gain Map mode, metadata comes from the base image only. No WASM rebuild or extra runtime dependency is required.
 
-Orientation is normalized to 1 because browser decoding already applies it; image dimensions, color space and Software are updated for the export. The source MakerNote is replaced with the encoder's current Apple HDR MakerNote, and the source thumbnail is not referenced. Original XMP/IPTC/ICC and EXIF extraction from TIFF/AVIF are outside this initial implementation. Absent, malformed or EXIF blocks larger than 1 MiB fall back to the encoder's generated metadata. Other source EXIF values are retained as capture metadata, not recomputed for edited pixels.
+- AVIF: metadata-only BMFF parsing supports `infe` v2/v3, `iinf` v0/v1, `iloc` v0/v1/v2, 32/64-bit offsets, file-backed and `idat`-backed items, split extents and nonzero EXIF TIFF offsets. External data references, item-offset construction and unbounded/unsafe offsets are rejected.
+- TIFF: only IFD0 capture/device fields (such as Make, Model, DateTime, Artist and Copyright), selected standard ExifIFD fields and GPSIFD values are serialized into a compact payload. Pixel data, Strip/Tile/SubIFD links, IFD1 thumbnails, opaque MakerNotes and unknown tags are omitted. Both byte orders are supported; BigTIFF is not. TIFF rotations and mirrors are applied to decoded pixels before export.
+- Export: Orientation becomes 1, dimensions match the rendered output, and Software/color space are updated. The current Apple HDR MakerNote replaces the source MakerNote. Other retained EXIF values describe the original capture, not measurements recomputed from edited pixels.
+- XMP: the encoder's Apple gain-map fields are retained. Output geometry/orientation, camera Make/Model, EXIF author/copyright and CreatorTool are mirrored into a new semantic XMP description. Original arbitrary XMP/IPTC blocks are not copied; keywords, ratings, regions and edit histories stored only in those blocks are not preserved. Original ICC profiles are not copied because the decoded/processed RGB pixels cannot safely be tagged with the source profile without an end-to-end color-management path.
+
+Absent, malformed or oversized metadata falls back to generated metadata. The 1 MiB limit applies to the extracted EXIF payload (after TIFF capture-only repacking), not the entire TIFF image. The output rewriter explicitly checks the bundled encoder's container layout and reports an error if it changes. Apple Photos/iOS validation remains to be performed.

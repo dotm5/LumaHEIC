@@ -200,8 +200,13 @@ HEVC 编码和分发可能涉及专利或平台授权义务，具体取决于应
 
 本项目与 Apple Inc. 没有关联，也未获得其赞助、认可或背书。Apple、Photos、macOS、iOS、iPhone、iPad、Quick Look、Preview 及相关名称是 Apple Inc. 的商标。README 中对这些名称的引用仅用于兼容性说明和技术验证目的。
 
-### 原图 EXIF 元数据
+### 原图拍摄元数据
 
-导出 HEIC 时，保留 JPEG、PNG（`eXIf`）和 WebP（`EXIF`）输入中的 EXIF，包括原有的拍摄时间、相机/镜头信息、作者/版权及 GPS。在 Base + Gain Map 模式下，仅使用底图的元数据。
+导出 HEIC 时，保留 JPEG、PNG（`eXIf`）、WebP（`EXIF`）、AVIF 和经典 TIFF 输入中的 EXIF。Base + Gain Map 模式仅使用底图元数据。无需重编 WASM，也不增加运行时依赖。
 
-浏览器解码已应用原图方向，因此导出方向归一为 1，并更新图像尺寸、色彩空间及 Software。原厂 MakerNote 替换为编码器本次生成的 Apple HDR MakerNote，原图缩略图不再被引用。首版不保留原始 XMP/IPTC/ICC，也暂不提取 TIFF/AVIF 中的 EXIF。EXIF 缺失、格式损坏或超过 1 MiB 时，使用编码器生成的元数据。其他原图 EXIF 作为拍摄记录保留，不根据编辑后的像素重新计算。
+- AVIF：仅解析元数据容器，支持 `infe` v2/v3、`iinf` v0/v1、`iloc` v0/v1/v2、32/64 位偏移、文件内或 `idat` 存储、多 extent 拼接，以及非零 EXIF TIFF 起始偏移。拒绝外部数据引用、item-offset 构造方式及无边界/不安全偏移。
+- TIFF：仅将 IFD0 拍摄/设备字段（如 Make、Model、DateTime、Artist、Copyright）、选定的标准 ExifIFD 字段及 GPSIFD 值重新序列化为紧凑 payload。剥离像素、Strip/Tile/SubIFD 链接、IFD1 缩略图、不透明 MakerNote 和未知 Tag。支持大小端，暂不支持 BigTIFF。TIFF 的旋转和镜像会先应用到解码像素。
+- 导出：Orientation 归一为 1，宽高对齐实际输出，更新 Software/色彩空间，并用本次 Apple HDR MakerNote 替换原厂 MakerNote。其他保留 EXIF 描述原始拍摄记录，不按编辑后的像素重新测量。
+- XMP：保留编码器的 Apple 增益图字段，并将输出宽高/方向、相机 Make/Model、EXIF 作者/版权及 CreatorTool 语义同步到新 XMP 描述。暂不复制原始任意 XMP/IPTC 块；仅存在于这些块中的关键词、评分、区域和编辑历史不会保留。暂不复制原始 ICC，因为缺少端到端色彩管理时，不能将已解码/处理的 RGB 像素直接标注为源配置文件。
+
+元数据缺失、损坏或超限时回退到生成元数据。1 MiB 限制作用于提取后的 EXIF payload（TIFF 完成拍摄字段重打包之后），不作用于整个 TIFF 图像。输出重写器会显式检查现有编码器的容器布局，布局改变时给出错误。Apple Photos/iOS 尚待实机验证。
