@@ -2,6 +2,7 @@ import type { BypassOptions, GainMapResult } from './gainMap'
 
 export type HeicEncodeRequest = {
   sourceName: string
+  sourceExif?: Uint8Array
   result: GainMapResult
   options: BypassOptions
   quality: number

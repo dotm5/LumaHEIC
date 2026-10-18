@@ -29,6 +29,7 @@ import {
 } from './lib/i18n'
 import { parameterHelp } from './lib/parameterHelp'
 import type { UiGainMapResult } from './features/preview/types'
+import { extractSourceExif } from './lib/sourceExif'
 import { decodeImageFile, imageToPngObjectUrl, validateImageFile } from './lib/imageIo'
 import { createTrackedObjectURL, debugImagePerfLog, revokeTrackedObjectURL } from './lib/imagePerfDebug'
 import { prepareImageInWorker } from './workers/imagePrepareClient'
@@ -60,6 +61,7 @@ function App() {
   const [inputMode, setInputMode] = React.useState<InputMode>('single-image-enhance')
   const [currentPreset, setCurrentPreset] = React.useState<PresetSelection>(defaultPresetId)
   const [sourceName, setSourceName] = React.useState('')
+  const [sourceExif, setSourceExif] = React.useState<Uint8Array | undefined>()
   const [sourceImage, setSourceImage] = React.useState<RgbaImage | null>(null)
   const [sourcePreviewImage, setSourcePreviewImage] = React.useState<RgbaImage | null>(null)
   const [gainMapName, setGainMapName] = React.useState('')
@@ -254,6 +256,7 @@ function App() {
       } else {
         setSourceName(file.name)
         setSourceImage(null)
+        setSourceExif(undefined)
         setSourcePreviewImage(null)
       }
 
@@ -268,7 +271,10 @@ function App() {
           activeTasks: workerRef.current ? 1 : 0,
         })
         setStatus({ key: 'statusDecodingSource' })
-        const decoded = await decodeImageFile(file, { signal: decodeController.signal })
+        const [decoded, exif] = await Promise.all([
+          decodeImageFile(file, { signal: decodeController.signal }),
+          target === 'source' ? file.arrayBuffer().then((buffer) => extractSourceExif(new Uint8Array(buffer))) : undefined,
+        ])
         if (!mountedRef.current || decodeId !== decodeSequenceRef.current[target] || decodeController.signal.aborted) {
           debugImagePerfLog('decode:discard-stale', { target, fileName: file.name, decodeId })
           return
@@ -290,6 +296,7 @@ function App() {
         } else {
           setSourceName(file.name)
           setSourceImage(decoded)
+          setSourceExif(exif)
           setSourcePreviewImage(prepared.previewImage)
           setStatus(
             prepared.usefulGain?.isLowDynamicRange
@@ -342,7 +349,7 @@ function App() {
   }, [result, sourceName])
 
   const startProcessing = React.useCallback((requestInput: ProcessingRequestInput) => {
-    const { encode, sourceImage, gainMapImage, inputMode, sourceName, options, quality } = requestInput
+    const { encode, sourceImage, gainMapImage, inputMode, sourceName, sourceExif, options, quality } = requestInput
     if (!encode && activeRequestKindRef.current === 'encode') {
       debugImagePerfLog('worker:skip-preview', { reason: 'encode-active' })
       return
@@ -391,6 +398,7 @@ function App() {
       id,
       mode: inputMode,
       sourceName,
+      sourceExif: encode ? sourceExif : undefined,
       image: requestImage,
       gainMapImage: requestGainMapImage,
       options,
@@ -414,6 +422,7 @@ function App() {
       gainMapImage: encode ? gainMapImage : (gainMapPreviewImage ?? gainMapImage),
       inputMode,
       sourceName,
+      sourceExif,
       options,
       quality,
     })
@@ -427,6 +436,7 @@ function App() {
     sourceImage,
     sourcePreviewImage,
     sourceName,
+    sourceExif,
     startProcessing,
     t.errorBrowserEncoderUnavailable,
   ])
@@ -636,6 +646,7 @@ type ProcessingRequestInput = {
   gainMapImage: RgbaImage | null
   inputMode: InputMode
   sourceName: string
+  sourceExif?: Uint8Array
   options: BypassOptions
   quality: number
 }
